@@ -449,7 +449,9 @@ class GLCamera(abcview.io.Camera, GLCameraMixin):
         self._center = self.views[self.viewer].centerOfInterest()
 
     def _get_translation(self):
-        return self.views[self.viewer].translation()
+        if self.viewer in self.views:
+            return self.views[self.viewer].translation()
+        return self._translation
 
     def _set_translation(self, value):
         if type(value) in (list, tuple):
@@ -462,7 +464,9 @@ class GLCamera(abcview.io.Camera, GLCameraMixin):
                            doc="get/set translation (imath.V3d)")
 
     def _get_rotation(self):
-        return self.views[self.viewer].rotation()
+        if self.viewer in self.views:
+            return self.views[self.viewer].rotation()
+        return self._rotation
 
     def _set_rotation(self, value):
         if type(value) in (list, tuple):
@@ -475,7 +479,9 @@ class GLCamera(abcview.io.Camera, GLCameraMixin):
                         doc="get/set rotation (imath.V3d)")
 
     def _get_scale(self):
-        return self.views[self.viewer].scale()
+        if self.viewer in self.views:
+            return self.views[self.viewer].scale()
+        return self._scale
 
     def _set_scale(self, value):
         if type(value) in (list, tuple):
@@ -487,7 +493,9 @@ class GLCamera(abcview.io.Camera, GLCameraMixin):
     scale = property(_get_scale, _set_scale, doc="get/set scale (imath.V3d)")
 
     def _get_near(self):
-        return self.views[self.viewer].clippingPlanes()[0]
+        if self.viewer in self.views:
+            return self.views[self.viewer].clippingPlanes()[0]
+        return self._near
 
     def _set_near(self, value):
         self._near = value
@@ -497,7 +505,9 @@ class GLCamera(abcview.io.Camera, GLCameraMixin):
     near = property(_get_near, _set_near, doc="get/set near clipping plane")
 
     def _get_far(self):
-        return self.views[self.viewer].clippingPlanes()[1]
+        if self.viewer in self.views:
+            return self.views[self.viewer].clippingPlanes()[1]
+        return self._far
    
     def _set_far(self, value):
         self._far = value
@@ -507,7 +517,9 @@ class GLCamera(abcview.io.Camera, GLCameraMixin):
     far = property(_get_far, _set_far, doc="get/set far clipping plane")
 
     def _get_fovy(self):
-        return self.views[self.viewer].fovy()
+        if self.viewer in self.views:
+            return self.views[self.viewer].fovy()
+        return self._fovy
    
     def _set_fovy(self, value):
         self._fovy = value
@@ -536,7 +548,9 @@ class GLCamera(abcview.io.Camera, GLCameraMixin):
     aspect_ratio = property(_get_aspect_ratio, _set_aspect_ratio, doc="aspect ratio")
 
     def _get_center(self):
-        return self.views[self.viewer].centerOfInterest()
+        if self.viewer in self.views:
+            return self.views[self.viewer].centerOfInterest()
+        return self._center
 
     def _set_center(self, value):
         self._center = value

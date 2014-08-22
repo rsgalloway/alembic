@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 #-******************************************************************************
 #
-# Copyright (c) 2012-2013,
+# Copyright (c) 2012-2014,
 #  Sony Pictures Imageworks Inc. and
 #  Industrial Light & Magic, a division of Lucasfilm Entertainment Company Ltd.
 #
@@ -519,11 +519,11 @@ class AbcView(QtGui.QMainWindow):
         self.console.updateNamespace({
             'exit': self.console.exit,
             'find': self.find,
-            'self': self, # legacy, don't use
             'app': self,
             'objects': self.objects_tree,
             'properties': self.properties_tree,
             'samples': self.samples_tree,
+            'selected': self.get_selected,
             'alembic': alembic,
             'abcview': abcview
             })
@@ -618,7 +618,7 @@ class AbcView(QtGui.QMainWindow):
         """
         Clears session and viewer.
         """
-        self.session.clear()
+        self.session = Session()
         self.viewer.clear()
         self.objects_tree.clear()
         self.properties_tree.clear()
@@ -1301,7 +1301,7 @@ class AbcView(QtGui.QMainWindow):
         :param item: ObjectTreeWidgetItem
         """
         self.viewer.remove_scene(item.object)
-
+    
     def handle_object_clicked(self, item):
         """
         Object tree item clicked handler.
@@ -1311,7 +1311,7 @@ class AbcView(QtGui.QMainWindow):
         self.samples_tree.clear()
         self.array_tree.clear()
         self.properties_tree.show_properties(item)
-
+    
     @wait
     def handle_property_clicked(self, item):
         """

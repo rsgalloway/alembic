@@ -39,6 +39,7 @@ import os
 import sys
 import time
 import copy
+import uuid
 
 import imath
 import alembic
@@ -80,11 +81,15 @@ class Mode:
 class AbcViewError(Exception):
     pass
 
-def DictListUpdate( lis1, lis2):
+def DictListUpdate(lis1, lis2):
     for aLis1 in lis1:
         if aLis1 not in lis2:
             lis2.append(aLis1)
     return lis2
+
+#TODO: consider a checksum of the data instead
+def make_uuid():
+    return uuid.uuid4().hex
 
 class idict(object):
     """
@@ -158,9 +163,12 @@ class idict(object):
         return dict(self.inherited.items() + self.local.items()).items()
 
 class Base(object):
-    def __init__(self):
+    def __init__(self, parent=None):
+        self.uuid = make_uuid()
         self.loaded = True
         self.instance = 1
+        self.parent = parent
+        self.overrides = idict()
         self.properties = idict()
 
     def __repr__(self):
@@ -189,10 +197,9 @@ class FileBase(Base):
     SERIALIZE = []
     EXT = None
     def __init__(self, filepath, parent=None):
-        super(FileBase, self).__init__()
+        super(FileBase, self).__init__(parent)
         self.__filepath = filepath
         self.__name = "Unnamed"
-        self.parent = parent
 
     def is_archive(self):
         return self.fileext == Scene.EXT
@@ -233,13 +240,99 @@ class FileBase(Base):
 
     fileext = property(_get_fileext, _set_fileext, doc="file extension")
 
+    def _get_parent(self):
+        if not hasattr(self, "_parent"):
+            self._parent = None
+        return self._parent
+
+    def _set_parent(self, parent):
+        if type(parent) in (Scene, Session) or parent == None:
+            self._parent = parent
+        else:
+            log.warn("cannot parent to: %s" % parent)
+
+    parent = property(_get_parent, _set_parent)
+
+    def _get_session(self):
+        parent = self.parent
+        sess = parent
+        while parent and type(parent) == Session:
+            sess = parent
+            parent = parent.parent
+        return sess
+
+    def _set_session(self, parent):
+        raise NotImplementedError
+
+    session = property(_get_session, _set_session)
+
+    def instancepath(self):
+        """
+        Returns the instance uuid path to this scene in a nested hierarchy.
+        """
+        path = self.uuid
+        parent = self.parent
+        while parent and parent != self.session:
+            path = ":".join([parent.uuid, path])
+            parent = parent.parent
+        return path
+
     def serialize(self):
         raise NotImplementedError
 
-class Scene(FileBase):
+class EditableMixin:
+    """
+    Some convenience methods for classes that have high-level properties, and
+    responsible for setting contextual overrides.
+    """
+
+    def _get_translate(self):
+        return self.properties.get("translate", (0, 0, 0))
+
+    def _set_translate(self, value):
+        self.properties["translate"] = [float(v) for v in value]
+
+    translate = property(_get_translate, _set_translate, doc="translate property")
+
+    def _get_rotate(self):
+        return self.properties.get("rotate", (0, 0, 0, 0))
+
+    def _set_rotate(self, value):
+        self.properties["rotate"] = [float(v) for v in value]
+
+    rotate = property(_get_rotate, _set_rotate, doc="rotation property")
+
+    def _get_scale(self):
+        return self.properties.get("scale", (1, 1, 1))
+
+    def _set_scale(self, value):
+        self.properties["scale"] = [float(v) for v in value]
+
+    scale = property(_get_scale, _set_scale, doc="scale property")
+
+    def _get_mode(self):
+        return self.properties.get("mode", -1)
+
+    def _set_mode(self, value):
+        self.properties["mode"] = int(value)
+
+    mode = property(_get_mode, _set_mode, doc="GL polygon mode property")
+
+    def _get_color(self):
+        return self.properties.get("color", (0.5, 0.5, 0.5))
+
+    def _set_color(self, value):
+        self.properties["color"] = [float(v) for v in value]
+
+    color = property(_get_color, _set_color, doc="color to display in viewer")
+
+    def has_xform_overrides(self):
+        return any(k in self.properties for k in ('translate', 'rotate', 'scale'))
+
+class Scene(FileBase, EditableMixin):
     """
     Represents a single item in an AbcView file 
-    (either .abc or .io file) 
+    (either .abc or .io file)
     """
     EXT = "abc"
     def __init__(self, filepath=None):
@@ -249,58 +342,24 @@ class Scene(FileBase):
     def __repr__(self):
         return "<%s \"%s\">" % (self.type(), self.name)
 
-    ## some convenience properties
-
-    def _get_translate(self):
-        return self.properties.get("translate", (0, 0, 0))
-
-    def _set_translate(self, value):
-        self.properties["translate"] = value
-
-    translate = property(_get_translate, _set_translate, doc="translate property")
-
-    def _get_rotate(self):
-        return self.properties.get("rotate", (0, 0, 0, 0))
-
-    def _set_rotate(self, value):
-        self.properties["rotate"] = value
-
-    rotate = property(_get_rotate, _set_rotate, doc="rotation property")
-
-    def _get_scale(self):
-        return self.properties.get("scale", (1, 1, 1))
-
-    def _set_scale(self, value):
-        self.properties["scale"] = value
-
-    scale = property(_get_scale, _set_scale, doc="scale property")
-
-    def _get_mode(self):
-        return self.properties.get("mode", -1)
-
-    def _set_mode(self, value):
-        self.properties["mode"] = value
-
-    mode = property(_get_mode, _set_mode, doc="GL polygon mode property")
-
-    def _get_color(self):
-        return self.properties.get("color", (0.5, 0.5, 0.5))
-
-    def _set_color(self, value):
-        self.properties["color"] = value
-
-    color = property(_get_color, _set_color, doc="color to display in viewer")
-
-    def has_xform_overrides(self):
-        return any(k in self.properties for k in ('translate', 'rotate', 'scale'))
-
     def serialize(self):
+        #if self.session == self.parent:
+        #    properties = self.properties.local
+        #else:
+        #    self.session.add_overrides(self, self.properties.local)
+        #    properties = {}
         return {
+            "uuid": self.uuid,
             "filepath": self.filepath,
             "instance": self.instance,
             "loaded": self.loaded,
             "name": self.name,
-            "properties": self.properties.local,
+            "overrides": {
+                self.instancepath(): {
+                    "properties": self.properties.local
+                }
+            }
+            #"properties": self.properties.local #properties,
         }
 
     @classmethod
@@ -309,9 +368,11 @@ class Scene(FileBase):
         Deserializes an Alembic scene from json data.
         """
         item = cls(data.get("filepath"))
+        item.uuid = data.get("uuid", make_uuid())
         item.name = data.get("name", "Unnamed")
         item.loaded = data.get("loaded", True)
         item.instance = data.get("instance", 1)
+        item.overrides = idict(data.get("overrides", {}))
         item.properties = idict(data.get("properties", {}))
         return item
 
@@ -635,7 +696,7 @@ class ICamera(CameraBase):
             setattr(cam, attr, params.get(attr))
         return cam
 
-class Session(FileBase):
+class Session(FileBase, EditableMixin):
     """
     AbcView API Session object. Top level container layer that holds
     properties and child session or scene objects.
@@ -679,13 +740,37 @@ class Session(FileBase):
         log.debug("[%s.add_item] %s" % (self, item))
         found_instances = [i.filepath for i in self.items if i.filepath == item.filepath]
         item.instance = len(found_instances) + 1
+        item.parent = self
+      
+        def apply_overrides(item):
+            """applies item overrides to children"""
+            if item.type() == Camera.type():
+                return
 
-        # TODO: replace with session deserialization
-        if type(item) == Session:
-            temp = copy.deepcopy(item.properties.local)
-            item.properties = idict()
-            item.properties.inherited.update(temp)
+            for path, overs in item.overrides.items():
 
+                if item.type() == Scene.type():
+                    if path == item.instancepath():
+                        item.name = overs.get("name", item.name)
+                        item.loaded = overs.get("loaded", item.loaded)
+                        item.filepath = overs.get("filepath", item.filepath)
+                        item.properties.update(overs.get("properties", {}))
+
+                elif item.type() == Session.type():
+                    for child in item.walk():
+                        if child.type() == Camera.type():
+                            continue
+                        elif not path.startswith(child.instancepath()):
+                            continue
+                        elif path == child.instancepath():
+                            child.name = overs.get("name", child.name)
+                            child.loaded = overs.get("loaded", child.loaded)
+                            child.filepath = overs.get("filepath", child.filepath)
+                            child.properties.update(overs.get("properties", {}))
+                        elif child.type() == Session.type():
+                            apply_overrides(child)
+
+        apply_overrides(item)
         self.__items.append(item)
 
     def remove_item(self, item):
@@ -745,6 +830,37 @@ class Session(FileBase):
             cam.loaded = False
         self.__cameras[camera.name].loaded = True
 
+    def get_overrides(self, item):
+        """
+        Returns property overrides for a given scene.
+
+        :param scene: Scene class object
+        """
+        return self.overrides.get(item.instancepath(), {})
+
+    def add_overrides(self, item, overrides):
+        """
+        Adds a property override for a given scene.
+
+        :param item: a session item
+        :param overrides: overrides dictionary
+        """
+        _overrides = self.overrides.get(item.instancepath(), {})
+        _overrides.update(overrides)
+        self.overrides.update({
+            item.instancepath(): _overrides
+        })
+
+    def remove_overrides(self, item):
+        """
+        Removes property overrides for a given scene.
+
+        :param item: session item
+        """
+        ip = item.instancepath()
+        if self.overrides.has_key(ip):
+            del self.overrides.local[ip]
+
     def serialize(self):
         """
         Serializes the session object to a JSON dict.
@@ -752,11 +868,12 @@ class Session(FileBase):
         def _serialize(item):
             if item.type() == "Session":
                 return {
+                    "uuid": item.uuid,
+                    "name": item.name,
                     "filepath": item.filepath, 
                     "instance": item.instance,
-                    "name": item.name,
                     "loaded": item.loaded,
-                    "properties": item.properties.local,
+                    "overrides": item.overrides.local,
                 }
             else:
                 return item.serialize()
@@ -780,6 +897,7 @@ class Session(FileBase):
     def clear(self):
         self.version = config.__version__
         self.program = config.__prog__
+        self.overrides = idict()
         self.properties = idict()
         self.date = time.time()
         self.min_time = 0
@@ -809,25 +927,24 @@ class Session(FileBase):
         # merge cameras
         self.__cameras.update(session.cameras)
 
+        # merge overrides
+        self.overrides.update(session.overrides)
+        
         # merge properties
         self.properties.update(session.properties)
 
     def walk(self):
         """
         Recursive generator that yields Session, Scene and Camera objects.
-        Adds a .session attribute to each item.
 
         :yield: Session, Scene or Camera objects
         """
         for item in self.items + self.cameras:
             if item.type() == Session.type():
-                item.session = self
                 yield item
                 for child in item.walk():
-                    child.session = item
                     yield child
             else:
-                item.session = self
                 yield item
 
     def load(self, filepath=None):
@@ -848,7 +965,6 @@ class Session(FileBase):
         self.program = state.get("app").get("program")
         self.date = state.get("date")
         self.instance = state.get("instance", 1)
-        self.properties = idict(state.get("properties"))
         self.frames_per_second = state.get("frames_per_second", 
                            self.frames_per_second)
         self.min_time = state.get("min_time", self.min_time)
@@ -866,13 +982,17 @@ class Session(FileBase):
         data = state.get("data")
         for d in data.get("items"):
             fp = str(d.get("filepath"))
+
             if fp.endswith(Scene.EXT):
                 self.add_item(Scene.deserialize(d))
+
+            # TODO: replace with deserialization for sessions
             elif fp.endswith(Session.EXT):
-                # TODO: replace with deserialization for sessions
                 item = Session(fp)
                 item.name = d.get("name", item.name)
+                item.uuid = d.get("uuid", item.uuid)
                 item.loaded = d.get("loaded", item.loaded)
+                item.overrides.update(d.get("overrides", {}))
                 item.properties.update(d.get("properties", {}))
                 self.add_item(item)
 
@@ -905,7 +1025,6 @@ class Session(FileBase):
             "max_time": self.max_time,
             "current_time": self.current_time,
             "frames_per_second": self.frames_per_second,
-            "properties": self.properties.local,
             "cameras": [camera.serialize() for camera in self.__cameras.values()],
             "data": self.serialize()
         }

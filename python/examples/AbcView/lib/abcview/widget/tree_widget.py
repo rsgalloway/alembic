@@ -243,9 +243,10 @@ class CameraTreeWidgetItem(ObjectTreeWidgetItem):
                         self.object.getName())
         return self.__camera
 
-class ScenePropertyTreeWidgetItem(AbcTreeWidgetItem):
-    def __init__(self, parent, property):
-        super(ScenePropertyTreeWidgetItem, self).__init__(parent, property)
+class EditableTreeWidgetItem(AbcTreeWidgetItem):
+    def __init__(self, parent, scene, property):
+        super(EditableTreeWidgetItem, self).__init__(parent, property)
+        self.scene = scene
         self.property = property
 
         for i in range(self.treeWidget().header().count()):
@@ -253,8 +254,26 @@ class ScenePropertyTreeWidgetItem(AbcTreeWidgetItem):
         self.treeWidget().header().showSection(self.treeWidget().colnum('name'))
         self.treeWidget().header().showSection(self.treeWidget().colnum('value'))
 
-        self.setText('name', self.property[0])
-        self.setText('value', self.property[1])
+        self.setText('name', self.name())
+        self.setText('value', self.formatted())
+
+        self.setToolTip('name', self.name())
+        self.setToolTip('value', self.value())
+
+    def name(self):
+        return self.property[0]
+
+    def value(self):
+        return self.property[1]
+
+    def formatted(self):
+        if self.type() in (list, tuple):
+            return ", ".join([str(v) for v in self.value()])
+        elif self.type() in (unicode, str, int, float, bool):
+            return str(self.value())
+
+    def type(self):
+        return type(self.value())
 
     def samples(self):
         return []
@@ -265,6 +284,7 @@ class PropertyTreeWidgetItem(AbcTreeWidgetItem):
         :param property: IArray or IScalar Property object
         """
         super(PropertyTreeWidgetItem, self).__init__(parent, property)
+        self.scene = parent
         self.property = property
         
         if self.property.isCompound():
@@ -546,33 +566,67 @@ class AbcTreeWidget(DeselectableTreeWidget):
         """
         Item double-click handler.
         """
-        if type(item) != SceneTreeWidgetItem:
-            return
         self._item = item
-        editor = SceneLineEditor(item, item.object.name)
-        #validator = QtGui.QValidator(QtCore.QRegExp(""))
-        #editor.setValidator(validator)
-        self.setItemWidget(item, self.colnum('name'), editor)
+        if type(item) in (SessionTreeWidgetItem, SceneTreeWidgetItem):
+            value = item.object.name
+            colnum = self.colnum('name')
+        elif type(item) in (EditableTreeWidgetItem, ):
+            value = item.formatted()
+            colnum = self.colnum('value')
+        else:
+            return
+        editor = SceneLineEditor(item, str(value))
+        self._item.editor = editor
+        self.setItemWidget(item, colnum, editor)
         self.emit(QtCore.SIGNAL('itemDoubleClicked (PyQt_PyObject)'), 
                 item)
-        editor.textEdited.connect(self.handle_name_change)
+        #editor.textEdited.connect(self.handle_value_change)
         editor.editingFinished.connect(self.handle_done_editing)
 
-    def handle_name_change(self, value):
+    def handle_value_change(self, value):
         """
         Handles text change for item delegate line edits.
         """
-        name = str(value.toAscii())
-        if self._item and name:
-            self._item.object.name = name
-            self._item.setText(self.colnum('name'), name)
+        if not self._item or not value:
+            return
+        value = str(value.toAscii())
+        if type(self._item) in (SessionTreeWidgetItem, SceneTreeWidgetItem):
+            self._item.object.name = value
+            self._item.setText('name', value)
+        elif type(self._item) in (EditableTreeWidgetItem, ):
+            value = eval(value)
+            setattr(self._item.scene.object, self._item.object[0], value)
+            self._item.property = (self._item.object[0], value)
+            self._item.setText('value', value)
 
     def handle_done_editing(self):
         """
         Line edit delegate done editing handler.
         """
-        if self._item:
+        if not self._item or not self._item.editor:
+            return
+
+        new_value = str(self._item.editor.text().toAscii())
+
+        # from the objects tree, you can only rename sessions and scenes
+        if type(self._item) in (SessionTreeWidgetItem, SceneTreeWidgetItem):
             self.removeItemWidget(self._item, self.colnum('name'))
+            self._item.object.name = value
+            self._item.setText('name', value)
+
+        # editable property tree widget item
+        elif type(self._item) in (EditableTreeWidgetItem, ):
+            self.removeItemWidget(self._item, self.colnum('value'))
+            if self._item.type() in (list, tuple):
+                value = [v.strip() for v in new_value.split(",")]
+            
+            #TODO: add override to session item
+            setattr(self._item.scene.object, self._item.name(), value)
+            
+            self._item.property = (self._item.name(), value)
+            self._item.setText('value', self._item.formatted())
+
+        self._item = None
 
     def handle_item_expanded(self, item):
         raise NotImplementedError("implement in subclass")
@@ -857,6 +911,7 @@ class PropertyTreeWidget(AbcTreeWidget):
     DEFAULT_COLUMNS = dict(enumerate(DEFAULT_COLUMN_NAMES))
     DEFAULT_COLUMNS.update(dict(zip(DEFAULT_COLUMN_NAMES, range(len(DEFAULT_COLUMN_NAMES)))))
     COLUMNS = copy.copy(DEFAULT_COLUMNS)
+    EDITABLE = ["name", "filepath", "translate", "rotate", "scale", "color"]
 
     def __init__(self, parent, main):
         super(PropertyTreeWidget, self).__init__(parent, main)
@@ -870,12 +925,21 @@ class PropertyTreeWidget(AbcTreeWidget):
     def show_properties(self, item):
         self.clear()
         if type(item) in (SessionTreeWidgetItem, SceneTreeWidgetItem):
+
+            # special properties, like translate, rotate, scale...
+            for editable in self.EDITABLE:
+                property = (editable, getattr(item.object, editable))
+                self.addTopLevelItem(EditableTreeWidgetItem(self, item, property))
+
             if type(item) == SceneTreeWidgetItem:
                 info = alembic.Abc.GetArchiveInfo(item.object.archive)
                 for key, value in info.items():
-                    self.addTopLevelItem(ScenePropertyTreeWidgetItem(self, (key, value)))
+                    self.addTopLevelItem(EditableTreeWidgetItem(self, item, (key, value)))
+
             for property in item.properties():
-                self.addTopLevelItem(ScenePropertyTreeWidgetItem(self, property))
+                if property[0] in self.EDITABLE:
+                    continue
+                self.addTopLevelItem(EditableTreeWidgetItem(self, item, property))
         else:
             for property in item.properties():
                 self.addTopLevelItem(PropertyTreeWidgetItem(self, property))
