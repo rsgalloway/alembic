@@ -443,9 +443,9 @@ class SceneTreeWidgetItem(SessionTreeWidgetItem):
         :param color: QColor object
         """
         # normalize color values
-        self.object.color = (color.red() / 500.0, 
-                   color.green() / 500.0, 
-                   color.blue() / 500.0)
+        rgb = (color.red(), color.green(), color.blue())
+        normalized = [c / 500.0 for c in rgb]
+        self.object.color = normalized
 
         # update delegate widget stylesheet
         self.g.setStyleSheet("background: rgb(%.2f, %.2f, %.2f);" 
@@ -618,11 +618,20 @@ class AbcTreeWidget(DeselectableTreeWidget):
         elif type(self._item) in (EditableTreeWidgetItem, ):
             self.removeItemWidget(self._item, self.colnum('value'))
             if self._item.type() in (list, tuple):
-                value = [v.strip() for v in new_value.split(",")]
+                value = [float(v.strip()) for v in new_value.split(",")]
             
-            #TODO: add override to session item
             setattr(self._item.scene.object, self._item.name(), value)
             
+            # add override to session item
+            self._item.scene.object.add_override(self._item.name(), value)
+            #scene = self._item.scene.object
+            #top = scene.instancepath().split(":")[0]
+            #for item in scene.session.items:
+            #    if item.uuid == top:
+            #        overs = item.overrides.local.setdefault(scene.instancepath(), {})
+            #        props = overs.setdefault("properties", {})
+            #        props.update({self._item.name(): value})
+
             self._item.property = (self._item.name(), value)
             self._item.setText('value', self._item.formatted())
 
@@ -752,6 +761,9 @@ class ObjectTreeWidget(AbcTreeWidget):
         rgba, ok = dialog.getRgba()
         if ok and type(item) == SceneTreeWidgetItem:
             item.set_color(QtGui.QColor(rgba))
+            
+            # add a session override
+            item.object.add_override("color", item.object.color)
 
     def handle_set_mode(self, mode):
         """

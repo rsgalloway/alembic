@@ -286,6 +286,15 @@ class EditableMixin:
     responsible for setting contextual overrides.
     """
 
+    def add_override(self, name, value):
+        """adds a session override for a given item"""
+        top = self.instancepath().split(":")[0]
+        for item in self.session.items:
+            if item.uuid == top:
+                overs = item.overrides.local.setdefault(self.instancepath(), {})
+                props = overs.setdefault("properties", {})
+                props.update({name: value})
+
     def _get_translate(self):
         return self.properties.get("translate", (0, 0, 0))
 
@@ -343,11 +352,6 @@ class Scene(FileBase, EditableMixin):
         return "<%s \"%s\">" % (self.type(), self.name)
 
     def serialize(self):
-        #if self.session == self.parent:
-        #    properties = self.properties.local
-        #else:
-        #    self.session.add_overrides(self, self.properties.local)
-        #    properties = {}
         return {
             "uuid": self.uuid,
             "filepath": self.filepath,
@@ -359,7 +363,6 @@ class Scene(FileBase, EditableMixin):
                     "properties": self.properties.local
                 }
             }
-            #"properties": self.properties.local #properties,
         }
 
     @classmethod
@@ -829,37 +832,6 @@ class Session(FileBase, EditableMixin):
         for name, cam in self.__cameras.items():
             cam.loaded = False
         self.__cameras[camera.name].loaded = True
-
-    def get_overrides(self, item):
-        """
-        Returns property overrides for a given scene.
-
-        :param scene: Scene class object
-        """
-        return self.overrides.get(item.instancepath(), {})
-
-    def add_overrides(self, item, overrides):
-        """
-        Adds a property override for a given scene.
-
-        :param item: a session item
-        :param overrides: overrides dictionary
-        """
-        _overrides = self.overrides.get(item.instancepath(), {})
-        _overrides.update(overrides)
-        self.overrides.update({
-            item.instancepath(): _overrides
-        })
-
-    def remove_overrides(self, item):
-        """
-        Removes property overrides for a given scene.
-
-        :param item: session item
-        """
-        ip = item.instancepath()
-        if self.overrides.has_key(ip):
-            del self.overrides.local[ip]
 
     def serialize(self):
         """
