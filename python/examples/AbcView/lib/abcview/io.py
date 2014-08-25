@@ -287,13 +287,78 @@ class EditableMixin:
     """
 
     def add_override(self, name, value):
-        """adds a session override for a given item"""
+        """
+        Adds an override to this item on the item's session.
+
+        :param name: property name
+        :param value: property value
+        """
+
+        # get the top session item for this item
         top = self.instancepath().split(":")[0]
         for item in self.session.items:
+
+            # update property overrides
             if item.uuid == top:
                 overs = item.overrides.local.setdefault(self.instancepath(), {})
                 props = overs.setdefault("properties", {})
                 props.update({name: value})
+
+        self.apply_overrides(self)
+
+    def apply_overrides(self, item):
+        """
+        Applies item overrides to children.
+
+        :param item: Session or Scene item containing overrides
+        """
+        def sum_two_lists(first, second):
+            if not second:
+                return first
+            if not first:
+                return second
+            if len(first) != len(second):
+                return first
+            return [x + y for x, y in zip(first, second)]
+
+        if item.type() == Camera.type():
+            return
+
+        for path, overs in item.overrides.items():
+            if path == item.instancepath():
+                item.name = overs.get("name", item.name)
+                item.loaded = overs.get("loaded", item.loaded)
+                item.filepath = overs.get("filepath", item.filepath)
+                item.properties.update(overs.get("properties", {}))
+
+            if item.type() == Session.type():
+                for child in item.walk():
+                    if child.type() == Camera.type():
+                        continue
+
+                    elif child.instancepath() == path:
+                        child.translate = overs.get("properties", {}).get("translate", child.translate)
+                        child.rotate = overs.get("properties", {}).get("rotate", child.rotate)
+                        child.scale = overs.get("properties", {}).get("scale", child.scale)
+
+                    elif child.instancepath().startswith(path):
+                        child.name = overs.get("name", child.name)
+                        child.loaded = overs.get("loaded", child.loaded)
+                        child.filepath = overs.get("filepath", child.filepath)
+                        child.color = overs.get("properties", {}).get("color", child.color)
+
+                        child.translate = sum_two_lists(child.properties.inherited.get("translate", child.translate),
+                            overs.get("properties", {}).get("translate")
+                        )
+                        child.rotate = sum_two_lists(child.properties.inherited.get("rotate", child.rotate),
+                            overs.get("properties", {}).get("rotate")
+                        )
+                        child.scale = sum_two_lists(child.properties.inherited.get("scale", child.scale),
+                            overs.get("properties", {}).get("scale")
+                        )
+
+                    elif child.type() == Session.type():
+                        self.apply_overrides(child)
 
     def _get_translate(self):
         return self.properties.get("translate", (0, 0, 0))
@@ -376,7 +441,7 @@ class Scene(FileBase, EditableMixin):
         item.loaded = data.get("loaded", True)
         item.instance = data.get("instance", 1)
         item.overrides = idict(data.get("overrides", {}))
-        item.properties = idict(data.get("properties", {}))
+        #item.properties = idict(data.get("properties", {}))
         return item
 
 class CameraBase(Base):
@@ -744,36 +809,7 @@ class Session(FileBase, EditableMixin):
         found_instances = [i.filepath for i in self.items if i.filepath == item.filepath]
         item.instance = len(found_instances) + 1
         item.parent = self
-      
-        def apply_overrides(item):
-            """applies item overrides to children"""
-            if item.type() == Camera.type():
-                return
-
-            for path, overs in item.overrides.items():
-
-                if item.type() == Scene.type():
-                    if path == item.instancepath():
-                        item.name = overs.get("name", item.name)
-                        item.loaded = overs.get("loaded", item.loaded)
-                        item.filepath = overs.get("filepath", item.filepath)
-                        item.properties.update(overs.get("properties", {}))
-
-                elif item.type() == Session.type():
-                    for child in item.walk():
-                        if child.type() == Camera.type():
-                            continue
-                        elif not path.startswith(child.instancepath()):
-                            continue
-                        elif path == child.instancepath():
-                            child.name = overs.get("name", child.name)
-                            child.loaded = overs.get("loaded", child.loaded)
-                            child.filepath = overs.get("filepath", child.filepath)
-                            child.properties.update(overs.get("properties", {}))
-                        elif child.type() == Session.type():
-                            apply_overrides(child)
-
-        apply_overrides(item)
+        self.apply_overrides(item)
         self.__items.append(item)
 
     def remove_item(self, item):
@@ -965,7 +1001,7 @@ class Session(FileBase, EditableMixin):
                 item.uuid = d.get("uuid", item.uuid)
                 item.loaded = d.get("loaded", item.loaded)
                 item.overrides.update(d.get("overrides", {}))
-                item.properties.update(d.get("properties", {}))
+                #item.properties.update(d.get("properties", {}))
                 self.add_item(item)
 
     def save(self, filepath=None):

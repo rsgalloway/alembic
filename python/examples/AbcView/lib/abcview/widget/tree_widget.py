@@ -580,6 +580,7 @@ class AbcTreeWidget(DeselectableTreeWidget):
         self.setItemWidget(item, colnum, editor)
         self.emit(QtCore.SIGNAL('itemDoubleClicked (PyQt_PyObject)'), 
                 item)
+        self._item.old_value = str(self._item.editor.text().toAscii())
         #editor.textEdited.connect(self.handle_value_change)
         editor.editingFinished.connect(self.handle_done_editing)
 
@@ -606,35 +607,33 @@ class AbcTreeWidget(DeselectableTreeWidget):
         if not self._item or not self._item.editor:
             return
 
+        def s2f(val):
+            return [float(v.strip()) for v in val.split(",")]
+        
         new_value = str(self._item.editor.text().toAscii())
 
-        # from the objects tree, you can only rename sessions and scenes
-        if type(self._item) in (SessionTreeWidgetItem, SceneTreeWidgetItem):
-            self.removeItemWidget(self._item, self.colnum('name'))
-            self._item.object.name = value
-            self._item.setText('name', value)
+        if new_value != self._item.old_value:
 
-        # editable property tree widget item
-        elif type(self._item) in (EditableTreeWidgetItem, ):
-            self.removeItemWidget(self._item, self.colnum('value'))
-            if self._item.type() in (list, tuple):
-                value = [float(v.strip()) for v in new_value.split(",")]
-            
-            setattr(self._item.scene.object, self._item.name(), value)
-            
-            # add override to session item
-            self._item.scene.object.add_override(self._item.name(), value)
-            #scene = self._item.scene.object
-            #top = scene.instancepath().split(":")[0]
-            #for item in scene.session.items:
-            #    if item.uuid == top:
-            #        overs = item.overrides.local.setdefault(scene.instancepath(), {})
-            #        props = overs.setdefault("properties", {})
-            #        props.update({self._item.name(): value})
+            # from the objects tree, you can only rename sessions and scenes
+            if type(self._item) in (SessionTreeWidgetItem, SceneTreeWidgetItem):
+                self._item.object.name = value
+                self._item.setText('name', value)
 
-            self._item.property = (self._item.name(), value)
-            self._item.setText('value', self._item.formatted())
+            # editable property tree widget item
+            elif type(self._item) in (EditableTreeWidgetItem, ):
+                if self._item.type() in (list, tuple):
+                    new_value = s2f(new_value)
+               
+                # set internal property values for gl viewer
+                setattr(self._item.scene.object, self._item.name(), new_value)
+                
+                # add override to session item
+                self._item.scene.object.add_override(self._item.name(), new_value)
 
+                self._item.property = (self._item.name(), new_value)
+                self._item.setText('value', self._item.formatted())
+
+        self.removeItemWidget(self._item, self.colnum('value'))
         self._item = None
 
     def handle_item_expanded(self, item):
