@@ -48,6 +48,7 @@ import alembic
 from abcview.io import Scene, Session, Mode
 from abcview.gl import GLScene
 from abcview.utils import find_objects, get_schema_info
+from abcview.utils import sum_two_lists, diff_two_lists
 from abcview import log, style, config
 
 def message(info):
@@ -386,7 +387,7 @@ class SessionTreeWidgetItem(AbcTreeWidgetItem):
         self.setExpanded(True)
         self.setText('name', self.object.name)
         self.setToolTip('name', self.object.filepath)
-        self.setCheckState(self.treeWidget().colnum(""), QtCore.Qt.Unchecked)
+        self.setCheckState(self.treeWidget().colnum(""), QtCore.Qt.Checked)
 
     def load(self):
         self.object.loaded = True
@@ -623,10 +624,11 @@ class AbcTreeWidget(DeselectableTreeWidget):
             elif type(self._item) in (EditableTreeWidgetItem, ):
                 if self._item.type() in (list, tuple):
                     new_value = s2f(new_value)
+                    old_value = s2f(self._item.old_value)
+                    diff_value = diff_two_lists(old_value, new_value)
+                else:
+                    diff_value = new_value
                
-                # set internal property values for gl viewer
-                setattr(self._item.scene.object, self._item.name(), new_value)
-                
                 # add override to session item
                 self._item.scene.object.add_override(self._item.name(), new_value)
 
@@ -777,6 +779,9 @@ class ObjectTreeWidget(AbcTreeWidget):
         item = self.selectedItems()[0]
         item.object.mode = mode
         self.setCursor(QtCore.Qt.ArrowCursor)
+        
+        # add a session override
+        item.object.add_override("mode", mode)
 
     def handle_duplicate_item(self):
         raise NotImplementedError

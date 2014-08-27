@@ -45,7 +45,7 @@ import imath
 import alembic
 from abcview import config, log
 from abcview.utils import get_object
-from abcview.utils import json
+from abcview.utils import json, sum_two_lists, diff_two_lists
 
 __doc__ = """
 The IO module handles serialization and deserialization of the assembled 
@@ -101,6 +101,7 @@ class idict(object):
  
         self.local = dict(**kwargs)
         self.inherited = dict()
+        self.saved = dict()
         
         if args:
             self.local = copy.deepcopy(args[0])
@@ -286,12 +287,13 @@ class EditableMixin:
     responsible for setting contextual overrides.
     """
 
-    def add_override(self, name, value):
+    def add_override(self, name, value, apply=True):
         """
         Adds an override to this item on the item's session.
 
         :param name: property name
         :param value: property value
+        :param apply: apply overrides to children
         """
 
         # get the top session item for this item
@@ -304,7 +306,8 @@ class EditableMixin:
                 props = overs.setdefault("properties", {})
                 props.update({name: value})
 
-        self.apply_overrides(self)
+        if apply:
+            self.apply_overrides(self)
 
     def apply_overrides(self, item):
         """
@@ -312,15 +315,6 @@ class EditableMixin:
 
         :param item: Session or Scene item containing overrides
         """
-        def sum_two_lists(first, second):
-            if not second:
-                return first
-            if not first:
-                return second
-            if len(first) != len(second):
-                return first
-            return [x + y for x, y in zip(first, second)]
-
         if item.type() == Camera.type():
             return
 
@@ -336,24 +330,29 @@ class EditableMixin:
                     if child.type() == Camera.type():
                         continue
 
+                    # scene level overrides (exact match)
                     elif child.instancepath() == path:
                         child.translate = overs.get("properties", {}).get("translate", child.translate)
                         child.rotate = overs.get("properties", {}).get("rotate", child.rotate)
                         child.scale = overs.get("properties", {}).get("scale", child.scale)
+                        child.color = overs.get("properties", {}).get("color", child.color)
+                        child.mode = overs.get("properties", {}).get("mode", child.mode)
 
+                    # session level overrides (all children)
                     elif child.instancepath().startswith(path):
                         child.name = overs.get("name", child.name)
                         child.loaded = overs.get("loaded", child.loaded)
                         child.filepath = overs.get("filepath", child.filepath)
                         child.color = overs.get("properties", {}).get("color", child.color)
+                        child.mode = overs.get("properties", {}).get("mode", child.mode)
 
-                        child.translate = sum_two_lists(child.properties.inherited.get("translate", child.translate),
+                        child.translate = sum_two_lists(child.properties.saved.get("translate", child.translate),
                             overs.get("properties", {}).get("translate")
                         )
-                        child.rotate = sum_two_lists(child.properties.inherited.get("rotate", child.rotate),
+                        child.rotate = sum_two_lists(child.properties.saved.get("rotate", child.rotate),
                             overs.get("properties", {}).get("rotate")
                         )
-                        child.scale = sum_two_lists(child.properties.inherited.get("scale", child.scale),
+                        child.scale = sum_two_lists(child.properties.saved.get("scale", child.scale),
                             overs.get("properties", {}).get("scale")
                         )
 
@@ -364,7 +363,10 @@ class EditableMixin:
         return self.properties.get("translate", (0, 0, 0))
 
     def _set_translate(self, value):
-        self.properties["translate"] = [float(v) for v in value]
+        value = [float(v) for v in value]
+        if not self.properties.saved.get("translate"):
+            self.properties.saved["translate"] = value
+        self.properties["translate"] = value
 
     translate = property(_get_translate, _set_translate, doc="translate property")
 
@@ -372,7 +374,10 @@ class EditableMixin:
         return self.properties.get("rotate", (0, 0, 0, 0))
 
     def _set_rotate(self, value):
-        self.properties["rotate"] = [float(v) for v in value]
+        value = [float(v) for v in value]
+        if not self.properties.saved.get("rotate"):
+            self.properties.saved["rotate"] = value
+        self.properties["rotate"] = value
 
     rotate = property(_get_rotate, _set_rotate, doc="rotation property")
 
@@ -380,7 +385,10 @@ class EditableMixin:
         return self.properties.get("scale", (1, 1, 1))
 
     def _set_scale(self, value):
-        self.properties["scale"] = [float(v) for v in value]
+        value = [float(v) for v in value]
+        if not self.properties.saved.get("scale"):
+            self.properties.saved["scale"] = value
+        self.properties["scale"] = value
 
     scale = property(_get_scale, _set_scale, doc="scale property")
 
@@ -388,7 +396,10 @@ class EditableMixin:
         return self.properties.get("mode", -1)
 
     def _set_mode(self, value):
-        self.properties["mode"] = int(value)
+        value = int(value)
+        if not self.properties.saved.get("mode"):
+            self.properties.saved["mode"] = value
+        self.properties["mode"] = value
 
     mode = property(_get_mode, _set_mode, doc="GL polygon mode property")
 
@@ -396,7 +407,10 @@ class EditableMixin:
         return self.properties.get("color", (0.5, 0.5, 0.5))
 
     def _set_color(self, value):
-        self.properties["color"] = [float(v) for v in value]
+        value = [float(v) for v in value]
+        if not self.properties.saved.get("color"):
+            self.properties.saved["color"] = value
+        self.properties["color"] = value
 
     color = property(_get_color, _set_color, doc="color to display in viewer")
 
@@ -441,7 +455,6 @@ class Scene(FileBase, EditableMixin):
         item.loaded = data.get("loaded", True)
         item.instance = data.get("instance", 1)
         item.overrides = idict(data.get("overrides", {}))
-        #item.properties = idict(data.get("properties", {}))
         return item
 
 class CameraBase(Base):
@@ -1001,7 +1014,6 @@ class Session(FileBase, EditableMixin):
                 item.uuid = d.get("uuid", item.uuid)
                 item.loaded = d.get("loaded", item.loaded)
                 item.overrides.update(d.get("overrides", {}))
-                #item.properties.update(d.get("properties", {}))
                 self.add_item(item)
 
     def save(self, filepath=None):
