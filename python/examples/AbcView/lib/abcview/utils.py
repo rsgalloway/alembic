@@ -135,27 +135,27 @@ class memoized(object):
         return res
 
 def sum_two_lists(first, second):
-    if not second:
+    if second is None:
         return first
-    if not first:
+    if first is None:
         return second
     if len(first) != len(second):
         return first
     return [x + y for x, y in zip(first, second)]
 
 def diff_two_lists(first, second):
-    if not second:
+    if second is None:
         return first
-    if not first:
+    if first is None:
         return second
     if len(first) != len(second):
         return first
     return [y + x for x, y in zip(first, second)]
 
 def mult_two_lists(first, second):
-    if not second:
+    if second is None:
         return first
-    if not first:
+    if first is None:
         return second
     if len(first) != len(second):
         return first

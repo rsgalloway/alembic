@@ -45,7 +45,7 @@ import imath
 import alembic
 from abcview import config, log
 from abcview.utils import get_object
-from abcview.utils import json, sum_two_lists, diff_two_lists
+from abcview.utils import json, sum_two_lists, diff_two_lists, mult_two_lists
 
 __doc__ = """
 The IO module handles serialization and deserialization of the assembled 
@@ -146,9 +146,11 @@ class idict(object):
         self.local.update(*args, **kwargs)
 
     def get(self, key, default=None):
-        return self.local.get(key, self.inherited.get(key, default))
+        return self.local.get(key, self.saved.get(key, default))
 
     def set(self, key, value):
+        if key not in self.saved:
+            self.saved[key] = value
         self.local[key] = value
 
     def has_key(self, key):
@@ -169,8 +171,7 @@ class Base(object):
         self.loaded = True
         self.instance = 1
         self.parent = parent
-        self.overrides = idict()
-        self.properties = idict()
+        self.clear_properties()
 
     def __repr__(self):
         return "<%s \"%s\">" % (self.type(), self.name)
@@ -193,6 +194,17 @@ class Base(object):
     @classmethod
     def deserialize(self):
         raise NotImplementedError("must be implemented in a subclass")
+
+    def clear_properties(self):
+        self.overrides = idict()
+        self.properties = idict()
+        self.properties.local = {
+            "translate": (0, 0, 0),
+            "rotate": (0, 0, 0, 0),
+            "scale": (1, 1, 1),
+            #"color": (0.5, 0.5, 0.5),
+            "mode": -1
+        }
 
 class FileBase(Base):
     SERIALIZE = []
@@ -295,7 +307,6 @@ class EditableMixin:
         :param value: property value
         :param apply: apply overrides to children
         """
-
         # get the top session item for this item
         top = self.instancepath().split(":")[0]
         for item in self.session.items:
@@ -305,9 +316,10 @@ class EditableMixin:
                 overs = item.overrides.local.setdefault(self.instancepath(), {})
                 props = overs.setdefault("properties", {})
                 props.update({name: value})
+                break
 
         if apply:
-            self.apply_overrides(self)
+            self.apply_overrides(item)
 
     def apply_overrides(self, item):
         """
@@ -315,28 +327,31 @@ class EditableMixin:
 
         :param item: Session or Scene item containing overrides
         """
+        
+        def reset_value_from_overrides(item, overs):
+            for prop in ("translate", "rotate", "scale", "color", "mode"):
+                item.properties.local[prop] = overs.get("properties", {}).get(prop, 
+                    item.properties.get(prop)
+                )
+                item.properties.saved[prop] = overs.get("properties", {}).get(prop, 
+                    item.properties.get(prop)
+                )
+
         if item.type() == Camera.type():
             return
 
         for path, overs in item.overrides.items():
             if path == item.instancepath():
-                item.name = overs.get("name", item.name)
-                item.loaded = overs.get("loaded", item.loaded)
-                item.filepath = overs.get("filepath", item.filepath)
-                item.properties.update(overs.get("properties", {}))
+                reset_value_from_overrides(item, overs)
 
             if item.type() == Session.type():
                 for child in item.walk():
                     if child.type() == Camera.type():
                         continue
 
-                    # scene level overrides (exact match)
+                    # scene level overrides (exact match, reset the saved values)
                     elif child.instancepath() == path:
-                        child.translate = overs.get("properties", {}).get("translate", child.translate)
-                        child.rotate = overs.get("properties", {}).get("rotate", child.rotate)
-                        child.scale = overs.get("properties", {}).get("scale", child.scale)
-                        child.color = overs.get("properties", {}).get("color", child.color)
-                        child.mode = overs.get("properties", {}).get("mode", child.mode)
+                        reset_value_from_overrides(child, overs)
 
                     # session level overrides (all children)
                     elif child.instancepath().startswith(path):
@@ -345,14 +360,14 @@ class EditableMixin:
                         child.filepath = overs.get("filepath", child.filepath)
                         child.color = overs.get("properties", {}).get("color", child.color)
                         child.mode = overs.get("properties", {}).get("mode", child.mode)
-
+                        
                         child.translate = sum_two_lists(child.properties.saved.get("translate", child.translate),
                             overs.get("properties", {}).get("translate")
                         )
                         child.rotate = sum_two_lists(child.properties.saved.get("rotate", child.rotate),
                             overs.get("properties", {}).get("rotate")
                         )
-                        child.scale = sum_two_lists(child.properties.saved.get("scale", child.scale),
+                        child.scale = mult_two_lists(child.properties.saved.get("scale", child.scale),
                             overs.get("properties", {}).get("scale")
                         )
 
@@ -360,56 +375,46 @@ class EditableMixin:
                         self.apply_overrides(child)
 
     def _get_translate(self):
-        return self.properties.get("translate", (0, 0, 0))
+        return self.properties.get("translate", self.properties.saved.get("translate"))
 
     def _set_translate(self, value):
         value = [float(v) for v in value]
-        if not self.properties.saved.get("translate"):
-            self.properties.saved["translate"] = value
         self.properties["translate"] = value
 
     translate = property(_get_translate, _set_translate, doc="translate property")
 
     def _get_rotate(self):
-        return self.properties.get("rotate", (0, 0, 0, 0))
+        return self.properties.get("rotate", self.properties.saved.get("rotate"))
 
     def _set_rotate(self, value):
         value = [float(v) for v in value]
-        if not self.properties.saved.get("rotate"):
-            self.properties.saved["rotate"] = value
         self.properties["rotate"] = value
 
     rotate = property(_get_rotate, _set_rotate, doc="rotation property")
 
     def _get_scale(self):
-        return self.properties.get("scale", (1, 1, 1))
+        return self.properties.get("scale", self.properties.saved.get("scale"))
 
     def _set_scale(self, value):
         value = [float(v) for v in value]
-        if not self.properties.saved.get("scale"):
-            self.properties.saved["scale"] = value
         self.properties["scale"] = value
 
     scale = property(_get_scale, _set_scale, doc="scale property")
 
     def _get_mode(self):
-        return self.properties.get("mode", -1)
+        return self.properties.get("mode", self.properties.saved.get("mode"))
 
     def _set_mode(self, value):
         value = int(value)
-        if not self.properties.saved.get("mode"):
-            self.properties.saved["mode"] = value
         self.properties["mode"] = value
 
     mode = property(_get_mode, _set_mode, doc="GL polygon mode property")
 
     def _get_color(self):
-        return self.properties.get("color", (0.5, 0.5, 0.5))
+        return self.properties.get("color", self.properties.saved.get("color", (0.5, 0.5, 0.5)))
 
     def _set_color(self, value):
         value = [float(v) for v in value]
-        if not self.properties.saved.get("color"):
-            self.properties.saved["color"] = value
         self.properties["color"] = value
 
     color = property(_get_color, _set_color, doc="color to display in viewer")
@@ -426,7 +431,7 @@ class Scene(FileBase, EditableMixin):
     def __init__(self, filepath=None):
         super(Scene, self).__init__(filepath)
         self.filepath = os.path.abspath(filepath)
-       
+
     def __repr__(self):
         return "<%s \"%s\">" % (self.type(), self.name)
 
@@ -918,8 +923,7 @@ class Session(FileBase, EditableMixin):
     def clear(self):
         self.version = config.__version__
         self.program = config.__prog__
-        self.overrides = idict()
-        self.properties = idict()
+        self.clear_properties()
         self.date = time.time()
         self.min_time = 0
         self.max_time = 0

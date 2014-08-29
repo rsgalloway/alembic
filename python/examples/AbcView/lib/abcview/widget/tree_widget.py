@@ -613,15 +613,20 @@ class AbcTreeWidget(DeselectableTreeWidget):
         
         new_value = str(self._item.editor.text().toAscii())
 
+        if type(self._item) in (SessionTreeWidgetItem, SceneTreeWidgetItem):
+            column = "name"
+        elif type(self._item) in (EditableTreeWidgetItem, ):
+            column = "value"
+
         if new_value != self._item.old_value:
 
             # from the objects tree, you can only rename sessions and scenes
-            if type(self._item) in (SessionTreeWidgetItem, SceneTreeWidgetItem):
-                self._item.object.name = value
-                self._item.setText('name', value)
+            if column == "name":
+                self._item.object.name = new_value
+                self._item.setText('name', new_value)
 
             # editable property tree widget item
-            elif type(self._item) in (EditableTreeWidgetItem, ):
+            elif column == "value":
                 if self._item.type() in (list, tuple):
                     new_value = s2f(new_value)
                     old_value = s2f(self._item.old_value)
@@ -635,7 +640,7 @@ class AbcTreeWidget(DeselectableTreeWidget):
                 self._item.property = (self._item.name(), new_value)
                 self._item.setText('value', self._item.formatted())
 
-        self.removeItemWidget(self._item, self.colnum('value'))
+        self.removeItemWidget(self._item, self.colnum(column))
         self._item = None
 
     def handle_item_expanded(self, item):
