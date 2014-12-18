@@ -214,7 +214,7 @@ class Test1_Write(unittest.TestCase):
         a = cask.Archive(lights_out())
         b = cask.Archive()
 
-        # find a light and assign it to b's hierarchy
+        # find a light and reparent it under b
         results = cask.find(a.top, "lightB")
         self.assertEqual(len(results), 1)
         b.top.children["lightB"] = results[0]
@@ -804,56 +804,46 @@ class Test3_Issues(unittest.TestCase):
         self.assertEqual(test_file_1, test_file_2)
 
     def test_issue_345(self):
-        filename_1 = "cask_test_issue_345_1.abc"
-        filename_2 = "cask_test_issue_345_2.abc"
-        filename_3 = "cask_test_issue_345_3.abc"
-
-        test_file_1 = mesh_out(filename_1)
-        test_file_2 = os.path.join(TEMPDIR, filename_2)
-        test_file_3 = os.path.join(TEMPDIR, filename_3)
+        test_file_mesh = os.path.join(TEMPDIR, "cask_write_mesh.abc")
         test_file_geom = os.path.join(TEMPDIR, "cask_write_geom.abc")
-
-        # round trip test some metadata
-        a = cask.Archive(test_file_1)
-        childBnds = a.top.children["meshy"].properties[".geom/.childBnds"]
-        uvs = a.top.children["meshy"].properties[".geom/uv"]
-        self.assertEqual(uvs.metadata.get("geoScope"), "fvr")
-        self.assertEqual(childBnds.metadata.get("interpretation"), "box")
-        a.write_to_file(test_file_2)
-        a.close()
         
-        a = cask.Archive(test_file_2)
-        childBnds = a.top.children["meshy"].properties[".geom/.childBnds"]
-        uvs = a.top.children["meshy"].properties[".geom/uv"]
-        self.assertEqual(uvs.metadata.get("geoScope"), "fvr")
-        self.assertEqual(childBnds.metadata.get("interpretation"), "box")
-        a.close()
+        test_file_1 = os.path.join(TEMPDIR, "cask_test_issue_345a.abc")
+        test_file_2 = os.path.join(TEMPDIR, "cask_test_issue_345b.abc")
 
-        # round trip test some pod values
+        a = cask.Archive(test_file_mesh)
+        a.write_to_file(test_file_1)
+ 
+        a = cask.Archive(test_file_mesh)
+        b = cask.Archive(test_file_1)
+
+        for aprop in a.top.children["foo"].properties[".xform"].properties.values():
+            bprop = b.top.children["foo"].properties[".xform"].properties[aprop.name]
+            self.assertEqual(aprop.pod(), bprop.pod())
+
+        for aprop in a.top.children["foo/meshy"].properties[".geom"].properties.values():
+            bprop = b.top.children["foo/meshy"].properties[".geom"].properties[aprop.name]
+            self.assertEqual(aprop.pod(), bprop.pod())
+
         a = cask.Archive(test_file_geom)
-        points = a.top.children.get("points")
-        curve = a.top.children.get("curve")
-        faceset = a.top.children.get("faceset")
-        polymesh = a.top.children.get("polymesh")
-        pod1 = points.properties[".geom/P"].pod()
-        pod2 = points.properties[".geom/.pointIds"].pod()
-        pod3 = curve.properties[".geom/curveBasisAndType"].pod()
-        pod4 = faceset.properties[".faceset"].pod()
-        pod5 = polymesh.properties[".geom/.selfBnds"].pod()
-        a.write_to_file(test_file_3)
-        a.close()
+        a.write_to_file(test_file_2)
 
-        a = cask.Archive(test_file_3)
-        points = a.top.children.get("points")
-        curve = a.top.children.get("curve")
-        faceset = a.top.children.get("faceset")
-        polymesh = a.top.children.get("polymesh")
-        self.assertEqual(points.properties[".geom/P"].pod(), pod1)
-        self.assertEqual(points.properties[".geom/.pointIds"].pod(), pod2)
-        self.assertEqual(curve.properties[".geom/curveBasisAndType"].pod(), pod3)
-        self.assertEqual(faceset.properties[".faceset"].pod(), pod4)
-        self.assertEqual(polymesh.properties[".geom/.selfBnds"].pod(), pod5)
-        a.close()
+        a = cask.Archive(test_file_geom)
+        b = cask.Archive(test_file_2)
+
+        def compare_props(props1, props2):
+            self.assertEqual(
+                set((p1.name, p1.pod()) for p1 in props1.values()),
+                set((p2.name, p2.pod()) for p2 in props2.values())
+            )
+            for p1 in props1.values():
+                if p1.is_compound():
+                    p2 = props2.get(p1.name)
+                    self.assertTrue(p2.is_compound())
+                    compare_props(p1.properties, p2.properties)
+
+        for ageom in a.top.children.values():
+            bgeom = b.top.children[ageom.name]
+            compare_props(ageom.properties, bgeom.properties)
 
     def test_issue_346(self):
         filename_1 = "cask_test_issue_346_1.abc"

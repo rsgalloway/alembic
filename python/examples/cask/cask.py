@@ -42,11 +42,12 @@ into high level convenience methods.
 
 More information can be found at http://docs.alembic.io/python/cask.html
 """
-__version__ = "0.9.3"
+__version__ = "0.9.4"
 
 import os
 import re
 import imath
+import ctypes
 import weakref
 import alembic
 from functools import wraps
@@ -96,14 +97,29 @@ ISCHEMAS = {
     "Xform": alembic.AbcGeom.IXformSchema,
 }
 
+def int8(n):
+    return ctypes.c_int8(n & 0xff).value
+
+def int16(n):
+    return ctypes.c_int16(n & 0xffff).value
+
+def int32(n):
+    return ctypes.c_int32(n & 0xffffffff).value
+
+def int64(n):
+    return ctypes.c_int64(n & 0xffffffffffffffff).value
+
+def uint8(n):
+    return ctypes.c_uint8(n).value
+
 def uint16(n):
-    return n & 0xffff
+    return ctypes.c_uint16(n).value
 
 def uint32(n):
-    return n & 0xffffffff
+    return ctypes.c_uint32(n).value
 
 def uint64(n):
-    return n & 0xffffffffffffffff
+    return ctypes.c_uint64(n).value
 
 # index of property class by value or name
 OPROPERTIES_BY_VALUE = {
@@ -122,6 +138,26 @@ OPROPERTIES_BY_VALUE = {
     str: {
         'scalar': alembic.Abc.OStringProperty,
         'array': alembic.Abc.OStringArrayProperty,
+    },
+    int8: {
+        'scalar': alembic.Abc.OCharProperty,
+        'array': alembic.Abc.OCharArrayProperty,
+    },
+    int16: {
+        'scalar': alembic.Abc.OInt16Property,
+        'array': alembic.Abc.OInt16ArrayProperty,
+    },
+    int32: {
+        'scalar': alembic.Abc.OInt32Property,
+        'array': alembic.Abc.OInt32ArrayProperty,
+    },
+    int64: {
+        'scalar': alembic.Abc.OInt64Property,
+        'array': alembic.Abc.OInt64ArrayProperty,
+    },
+    uint8: {
+        'scalar': alembic.Abc.OUcharProperty,
+        'array': alembic.Abc.OUcharArrayProperty,
     },
     uint16: {
         'scalar': alembic.Abc.OUInt16Property,
@@ -253,7 +289,13 @@ OPROPERTIES_BY_VALUE = {
 OPROPERTIES_BY_POD = {
     (alembic.Util.POD.kBooleanPOD, 1): OPROPERTIES_BY_VALUE.get(bool),
     (alembic.Util.POD.kStringPOD, 1): OPROPERTIES_BY_VALUE.get(str),
-    (alembic.Util.POD.kInt32POD, 1): OPROPERTIES_BY_VALUE.get(int),
+    (alembic.Util.POD.kInt8POD, 1): OPROPERTIES_BY_VALUE.get(int8),
+    (alembic.Util.POD.kInt16POD, 1): OPROPERTIES_BY_VALUE.get(int16),
+    (alembic.Util.POD.kInt32POD, 1): OPROPERTIES_BY_VALUE.get(int32),
+    (alembic.Util.POD.kInt64POD, 1): OPROPERTIES_BY_VALUE.get(int64),
+    (alembic.Util.POD.kUint8POD, 1): OPROPERTIES_BY_VALUE.get(uint8),
+    (alembic.Util.POD.kUint16POD, 1): OPROPERTIES_BY_VALUE.get(uint16),
+    (alembic.Util.POD.kUint32POD, 1): OPROPERTIES_BY_VALUE.get(uint32),
     (alembic.Util.POD.kUint64POD, 1): OPROPERTIES_BY_VALUE.get(uint64),
     (alembic.Util.POD.kFloat32POD, 1): OPROPERTIES_BY_VALUE.get(float),
     (alembic.Util.POD.kFloat32POD, 3): OPROPERTIES_BY_VALUE.get(imath.V3f),
@@ -266,6 +308,18 @@ OPROPERTIES_BY_POD = {
     (alembic.Util.POD.kFloat64POD, 16): OPROPERTIES_BY_VALUE.get(imath.M44d),
 }
 
+# index of property class by reserved name
+OPROPERTIES_BY_NAME = {
+    "visible": OPROPERTIES_BY_VALUE.get(int8),
+    'color': OPROPERTIES_BY_VALUE.get(imath.Color3f),
+    'colour': OPROPERTIES_BY_VALUE.get(imath.Color3f),
+    'geomColors': OPROPERTIES_BY_VALUE.get(imath.C3fArray),
+    'shadow_color': OPROPERTIES_BY_VALUE.get(imath.Color3f),
+    'shadow_colour': OPROPERTIES_BY_VALUE.get(imath.Color3f),
+    ".shaderNames": OPROPERTIES_BY_VALUE.get(str),
+    'slideMap': OPROPERTIES_BY_VALUE.get(str),
+}
+
 _COMPOUND_PROPERTY_VALUE_ERROR_ = "Compound properties cannot have values"
 
 class UnknownPropertyType(Exception):
@@ -275,7 +329,8 @@ def get_simple_oprop_class(prop, klass=None):
     """
     Returns the alembic simple property class based on a given name and value.
 
-    :param prop: Property class object
+    :param prop: Property object
+    :param klass: force a specific oproperty class
     :return: Alembic property class
     """
 
@@ -290,8 +345,13 @@ def get_simple_oprop_class(prop, klass=None):
     value = prop.values[0] if len(prop.values) > 0 else []
     value0 = value[0] if type(value) in (set, list) and len(value) > 0 else value
 
+    # look for property class by reserved name
+    if not klass:
+        klass = OPROPERTIES_BY_NAME.get(prop.name)
+        is_array = (type(value) in [set, list] and len(value) > 1)
+
     # look for property class by POD, extent
-    if prop.iobject:
+    if not klass and prop.iobject:
         klass = OPROPERTIES_BY_POD.get((
             prop.iobject.getDataType().getPod(),
             prop.iobject.getDataType().getExtent()
@@ -421,7 +481,7 @@ class DeepDict(dict):
             if new is False:
                 obj = obj.parent
             return obj.set_item(name, item)
-
+       
         item._name = name
         item._parent = obj
         return super(DeepDict, self).__setitem__(name, item)
@@ -484,7 +544,7 @@ class Archive(object):
         """gets oobject"""
         if self._oobject is None:
             if self.filepath and not os.path.exists(self.filepath):
-                self._oobject = alembic.Abc.OArchive(self.filepath)
+                self._oobject = alembic.Abc.OArchive(self.filepath, asOgawa=True)
                 self.top.oobject = self._oobject.getTop()
         return self._oobject
 
@@ -571,6 +631,12 @@ class Archive(object):
             return [iarch.getTimeSampling(i) for i in range(num_samples)]
         return self.__time_sampling_objects
 
+    def add_timesampling(self, ts):
+        if ts not in self.timesamplings:
+            self.__time_sampling_objects.append(ts)
+            self.__start_time = self.__end_time = None
+        return self.timesamplings.index(ts)
+
     def time_range(self):
         """
         Returns a tuple of the global start and end time in seconds.
@@ -642,10 +708,10 @@ class Archive(object):
         """Closes this archive and makes it immutable."""
         def close_tree(obj):
             """recursive close"""
-            obj.close()
             for child in obj.children.values():
                 close_tree(child)
                 del child
+            obj.close()
             del obj
 
         for child in self.top.children.values():
@@ -673,6 +739,10 @@ class Archive(object):
             obj.save()
             for child in obj.children.values():
                 save_tree(child)
+                child.close()
+                del child
+            obj.close()
+            del obj
         for child in self.top.children.values():
             save_tree(child)
         self.top.close()
@@ -693,7 +763,12 @@ class Archive(object):
             self.time_sampling_id = 1
         # create the oarchive
         if not self.oobject:
-            self.oobject = alembic.Abc.OArchive(filepath, asOgawa)
+            self.oobject = alembic.Abc.CreateArchiveWithInfo(
+                filepath,
+                "cask %s" % __version__,
+                str(self.top.metadata),
+                1, 1
+            )
             self.top.oobject = self.oobject.getTop()
         # set timesampling objects on the oarchive
         for i, time_sample in smps:
@@ -703,10 +778,12 @@ class Archive(object):
 
 class Property(object):
     """Property I/O Object."""
-    def __init__(self, iproperty=None, time_sampling_id=0, name=None):
+    def __init__(self, iproperty=None, time_sampling_id=0, name=None, klass=None):
         """
         :param iproperty: Alembic IProperty class object.
         :param time_sampling_id: TimeSampling object ID (inherits down).
+        :param name: Property name
+        :param klass: OProperty class used for writing
         """
         super(Property, self).__init__()
         self.id = id(self)
@@ -717,7 +794,7 @@ class Property(object):
         self._metadata = {}
         self._iobject = iproperty
         self._oobject = None
-        self._klass = None
+        self._klass = klass
         self._values = []
         self._prop_dict = DeepDict(self)
         self.time_sampling_id = time_sampling_id
@@ -756,7 +833,8 @@ class Property(object):
                 meta = self.iobject.getMetaData()
             else:
                 meta = alembic.AbcCoreAbstract.MetaData()
-            self._klass = get_simple_oprop_class(self)
+            if not self._klass:
+                self._klass = get_simple_oprop_class(self)
             if self.is_compound() and self.iobject:
                 meta.set('schema', self.iobject.getMetaData().get('schema'))
             if type(self.parent) == Property and self.parent.is_compound():
@@ -1024,10 +1102,13 @@ class Property(object):
         """
         Closes this property by removing references to internal OProperty.
         """
+        if self.parent:
+            del self.parent.properties[self.name]
         self._iobject = None
         self._oobject = None
         self._klass = None
         self._parent = None
+        self._values = []
         for prop in self.properties.values():
             prop.close()
 
@@ -1041,12 +1122,16 @@ class Property(object):
                 try:
                     self.oobject.setValue(value)
                 except Exception, err:
-                    print "Error setting value on %s: %s\n%s" \
-                        % (self.name, value, err)
+                    print "Error setting value on %s: %s %s\n%s" \
+                        % (self.name, value, self._klass, err)
+                del value
         else:
             for prop in self.properties.values():
                 prop.parent = self
                 prop.save()
+                prop.close()
+                del prop
+        self.close()
 
 class Object(object):
     """Base I/O Object class."""
@@ -1109,16 +1194,21 @@ class Object(object):
 
     def __get_oobject(self):
         """gets oobject"""
-        if self._oobject is None:
+        
+        # Using OObject subclasses (like OXform) automatically
+        # creates hidden Compound Properties (like .xform) which
+        # results in name collisions when saving properties in cask.
+        # Using OObjects avoids this problem, but we have to set
+        # the metadata manually.
+
+        if self.iobject:
+            meta = self.iobject.getMetaData()
+        else:
             meta = alembic.AbcCoreAbstract.MetaData()
-            # Using OObject subclasses (like OXform) automatically
-            # creates hidden Compound Properties (like .xform) which
-            # results in name collisions when saving properties in cask.
-            # Using OObjects avoids this problem, but we have to set
-            # the metadata manually.
-            if self.iobject and type(self) not in (Camera, ):
+
+        if self._oobject is None:
+            if self.iobject:
                 self._klass = alembic.Abc.OObject
-                meta = self.iobject.getMetaData()
             else:
                 self._klass = OOBJECTS.get(self.type())
             if self._klass:
@@ -1414,14 +1504,17 @@ class Object(object):
         """
         Closes this object by removing references to internal OObject.
         """
+        if self.parent and self.parent.type() != 'Archive':
+            del self.parent.children[self.name]
         self._iobject = None
         self._oobject = None
         self._klass = None
         self._parent = None
         self._schema = None
-
+        self.clear_all()
         for prop in self.properties.values():
             prop.close()
+            del prop
 
     def save(self):
         """
@@ -1430,14 +1523,21 @@ class Object(object):
         obj = self.oobject
         for prop in self.properties.values():
             prop.save()
+            prop.close()
+            del prop
         if not self._osamples:
             self._set_default_sample()
+        #FIXME: skip cameras because they have no schema
+        if self.type() == 'Camera':
+            return
         for sample in self._osamples:
             try:
                 obj.getSchema().set(sample)
             except AttributeError, err:
                 print "Error setting sample on %s: %s\n%s" \
                     %(self.name, sample, err)
+            del sample
+        del obj
 
 class Top(Object):
     """Alembic Top Object."""
