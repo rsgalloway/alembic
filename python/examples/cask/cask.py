@@ -300,6 +300,7 @@ OPROPERTIES_BY_POD = {
     (alembic.Util.POD.kFloat32POD, 1): OPROPERTIES_BY_VALUE.get(float),
     (alembic.Util.POD.kFloat32POD, 3): OPROPERTIES_BY_VALUE.get(imath.V3f),
     (alembic.Util.POD.kUint8POD, 4): OPROPERTIES_BY_VALUE.get(imath.Color4c),
+    (alembic.Util.POD.kUint8POD, 5): OPROPERTIES_BY_VALUE.get(uint8),
     (alembic.Util.POD.kFloat32POD, 6): OPROPERTIES_BY_VALUE.get(imath.Box3f),
     (alembic.Util.POD.kFloat64POD, 6): OPROPERTIES_BY_VALUE.get(imath.Box3d),
     (alembic.Util.POD.kFloat32POD, 9): OPROPERTIES_BY_VALUE.get(imath.M33f),
@@ -310,14 +311,14 @@ OPROPERTIES_BY_POD = {
 
 # index of property class by reserved name
 OPROPERTIES_BY_NAME = {
-    "visible": OPROPERTIES_BY_VALUE.get(int8),
+    ".shaderNames": OPROPERTIES_BY_VALUE.get(str),
     'color': OPROPERTIES_BY_VALUE.get(imath.Color3f),
     'colour': OPROPERTIES_BY_VALUE.get(imath.Color3f),
     'geomColors': OPROPERTIES_BY_VALUE.get(imath.C3fArray),
     'shadow_color': OPROPERTIES_BY_VALUE.get(imath.Color3f),
     'shadow_colour': OPROPERTIES_BY_VALUE.get(imath.Color3f),
-    ".shaderNames": OPROPERTIES_BY_VALUE.get(str),
     'slideMap': OPROPERTIES_BY_VALUE.get(str),
+    "visible": OPROPERTIES_BY_VALUE.get(int8),
 }
 
 _COMPOUND_PROPERTY_VALUE_ERROR_ = "Compound properties cannot have values"
@@ -920,6 +921,11 @@ class Property(object):
     def pod(self):
         if self.iobject:
             return self.iobject.getDataType().getPod()
+        return None
+
+    def extent(self):
+        if self.iobject:
+            return self.iobject.getDataType().getExtent()
         return None
 
     def archive(self):

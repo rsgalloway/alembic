@@ -806,40 +806,68 @@ class Test3_Issues(unittest.TestCase):
     def test_issue_345(self):
         test_file_mesh = os.path.join(TEMPDIR, "cask_write_mesh.abc")
         test_file_geom = os.path.join(TEMPDIR, "cask_write_geom.abc")
-        
-        test_file_1 = os.path.join(TEMPDIR, "cask_test_issue_345a.abc")
-        test_file_2 = os.path.join(TEMPDIR, "cask_test_issue_345b.abc")
+        test_file_lights = os.path.join(TEMPDIR, "cask_test_lights.abc")
+        test_file_cube = cube_out("cask_write_cube.abc")
 
-        a = cask.Archive(test_file_mesh)
-        a.write_to_file(test_file_1)
- 
-        a = cask.Archive(test_file_mesh)
-        b = cask.Archive(test_file_1)
-
-        for aprop in a.top.children["foo"].properties[".xform"].properties.values():
-            bprop = b.top.children["foo"].properties[".xform"].properties[aprop.name]
-            self.assertEqual(aprop.pod(), bprop.pod())
-
-        for aprop in a.top.children["foo/meshy"].properties[".geom"].properties.values():
-            bprop = b.top.children["foo/meshy"].properties[".geom"].properties[aprop.name]
-            self.assertEqual(aprop.pod(), bprop.pod())
-
-        a = cask.Archive(test_file_geom)
-        a.write_to_file(test_file_2)
-
-        a = cask.Archive(test_file_geom)
-        b = cask.Archive(test_file_2)
+        test_file_1 = os.path.join(TEMPDIR, "cask_test_issue_345_1.abc")
+        test_file_2 = os.path.join(TEMPDIR, "cask_test_issue_345_2.abc")
+        test_file_3 = os.path.join(TEMPDIR, "cask_test_issue_345_3.abc")
+        test_file_4 = os.path.join(TEMPDIR, "cask_test_issue_345_4.abc")
 
         def compare_props(props1, props2):
             self.assertEqual(
-                set((p1.name, p1.pod()) for p1 in props1.values()),
-                set((p2.name, p2.pod()) for p2 in props2.values())
+                set((p1.name, p1.pod(), p1.extent()) for p1 in props1.values()),
+                set((p2.name, p2.pod(), p2.extent()) for p2 in props2.values())
             )
             for p1 in props1.values():
                 if p1.is_compound():
                     p2 = props2.get(p1.name)
                     self.assertTrue(p2.is_compound())
                     compare_props(p1.properties, p2.properties)
+
+        # mesh test
+        a = cask.Archive(test_file_mesh)
+        a.write_to_file(test_file_1)
+        a.close()
+ 
+        a = cask.Archive(test_file_mesh)
+        b = cask.Archive(test_file_1)
+
+        for ageom in a.top.children.values():
+            bgeom = b.top.children[ageom.name]
+            compare_props(ageom.properties, bgeom.properties)
+
+        # geom test
+        a = cask.Archive(test_file_geom)
+        a.write_to_file(test_file_2)
+        a.close()
+
+        a = cask.Archive(test_file_geom)
+        b = cask.Archive(test_file_2)
+
+        for ageom in a.top.children.values():
+            bgeom = b.top.children[ageom.name]
+            compare_props(ageom.properties, bgeom.properties)
+
+        # cube test
+        a = cask.Archive(test_file_cube)
+        a.write_to_file(test_file_3)
+        a.close()
+
+        a = cask.Archive(test_file_cube)
+        b = cask.Archive(test_file_3)
+
+        for ageom in a.top.children.values():
+            bgeom = b.top.children[ageom.name]
+            compare_props(ageom.properties, bgeom.properties)
+
+        # lights test
+        a = cask.Archive(test_file_lights)
+        a.write_to_file(test_file_4)
+        a.close()
+
+        a = cask.Archive(test_file_lights)
+        b = cask.Archive(test_file_4)
 
         for ageom in a.top.children.values():
             bgeom = b.top.children[ageom.name]
