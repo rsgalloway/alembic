@@ -1,6 +1,6 @@
 #-******************************************************************************
 #
-# Copyright (c) 2012-2014,
+# Copyright (c) 2012-2015,
 #  Sony Pictures Imageworks Inc. and
 #  Industrial Light & Magic, a division of Lucasfilm Entertainment Company Ltd.
 #
@@ -42,7 +42,7 @@ into high level convenience methods.
 
 More information can be found at http://docs.alembic.io/python/cask.html
 """
-__version__ = "0.9.4"
+__version__ = "0.9.5a"
 
 import os
 import re
@@ -477,7 +477,12 @@ class DeepDict(dict):
                     obj = obj.get_item(name)
                 except KeyError:
                     if name != names[-1]:
-                        raise
+                        if type(item) == Property:
+                            child = obj.properties[name] = Property()
+                        else:
+                            child = obj.children[name] = Xform()
+                        child.parent = obj
+                        obj = child
                     new = True
             if new is False:
                 obj = obj.parent
@@ -1108,7 +1113,7 @@ class Property(object):
         """
         Closes this property by removing references to internal OProperty.
         """
-        if self.parent:
+        if self.parent and self.name in self.parent.properties:
             del self.parent.properties[self.name]
         self._iobject = None
         self._oobject = None
@@ -1133,10 +1138,20 @@ class Property(object):
                 del value
         else:
             for prop in self.properties.values():
-                prop.parent = self
+                up = False
+                if not prop.iobject and prop.parent.name == ".userProperties":
+                    up = Property()
+                    up._oobject = prop.object().oobject.getSchema().getUserProperties()
+                    up.properties[prop.name] = prop
+                    prop.parent = up
+                else:
+                    prop.parent = self
                 prop.save()
                 prop.close()
                 del prop
+                if up:
+                    up.close()
+                    del up
         self.close()
 
 class Object(object):

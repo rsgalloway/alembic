@@ -1,6 +1,6 @@
 #-******************************************************************************
 #
-# Copyright (c) 2012-2014,
+# Copyright (c) 2012-2015,
 #  Sony Pictures Imageworks Inc. and
 #  Industrial Light & Magic, a division of Lucasfilm Entertainment Company Ltd.
 #
@@ -524,8 +524,12 @@ class Test1_Write(unittest.TestCase):
         self.assertEqual(t.children["A/B/C/D/meshy"].type(), "Xform")
         self.assertEqual(p2.type(), "Xform")
 
-        # test deep set item when middle node does not exist
-        self.assertRaises(KeyError, t.children.__setitem__, "A/foo/C/D/bar", cask.Xform())
+        # test deep set item when middle nodes do not exist
+        try:
+            x = t.children["A/foo/C/D/bar"] = cask.Xform()
+            p = x.properties[".xform/.userProperties/foo"] = cask.Property()
+        except KeyError:
+            raise
 
         # write the archive
         a.write_to_file(filename)
@@ -785,6 +789,8 @@ class Test2_Read(unittest.TestCase):
 
 class Test3_Issues(unittest.TestCase):
     def test_issue_318(self):
+        """google code issue #318"""
+
         filename = "cask_test_issue_318.abc"
 
         # create a test file
@@ -804,6 +810,8 @@ class Test3_Issues(unittest.TestCase):
         self.assertEqual(test_file_1, test_file_2)
 
     def test_issue_345(self):
+        """google code issue #345"""
+
         test_file_mesh = os.path.join(TEMPDIR, "cask_write_mesh.abc")
         test_file_geom = os.path.join(TEMPDIR, "cask_write_geom.abc")
         test_file_lights = os.path.join(TEMPDIR, "cask_test_lights.abc")
@@ -874,6 +882,8 @@ class Test3_Issues(unittest.TestCase):
             compare_props(ageom.properties, bgeom.properties)
 
     def test_issue_346(self):
+        """google code issue #346"""
+
         filename_1 = "cask_test_issue_346_1.abc"
         filename_2 = "cask_test_issue_346_2.abc"
 
@@ -911,6 +921,8 @@ class Test3_Issues(unittest.TestCase):
         self.assertEqual(str(tst_3), str(tst_4))
 
     def test_issue_349(self):
+        """google code issue #349"""
+
         test_file = os.path.join(TEMPDIR, "cask_test_issue_349.abc")
 
         # create a new archive and some objects
@@ -936,6 +948,47 @@ class Test3_Issues(unittest.TestCase):
         self.assertEqual(len(xform.samples), 24)
         self.assertEqual(a.start_frame(), 0)
         self.assertEqual(a.end_frame(), 23)
+
+    def test_issue_23(self):
+        """github issue #23"""
+
+        test_file = os.path.join(TEMPDIR, "cask_test_issue_user_props.abc")
+
+        a = cask.Archive()
+        x = a.top.children["x"] = cask.Xform()
+        x.properties[".xform"] = cask.Property()
+
+        # create the .userProperties compound prop
+        up = x.properties[".xform"].properties[".userProperties"] = cask.Property()
+        
+        # create some user properties
+        p1 = up.properties["foo"] = cask.Property()
+        p1.set_value("bar")
+        p2 = up.properties["bar"] = cask.Property()
+        p2.set_value(1.0)
+
+        # export it
+        a.write_to_file(test_file)
+        a.close()
+
+        # read it back in and check for the user properties
+        a = cask.Archive(test_file)
+        x = a.top.children["x"]
+        self.assertEqual(x.properties.keys(), [".xform"])
+        self.assertEqual(x.properties[".xform"].properties.keys(), 
+            [".userProperties"])
+        up = x.properties[".xform/.userProperties"]
+
+        # assert the values are the same
+        self.assertEqual(len(up.properties), 2)
+        self.assertEqual(up.properties["foo"].values[0], "bar")
+        self.assertEqual(up.properties["bar"].values[0], 1.0)
+
+        # use the alembic python api directly
+        ph = a.top.children["x"].schema.getUserProperties().propertyheaders
+        self.assertEqual(len(ph), 2)
+        self.assertEqual(ph[0].getName(), "foo")
+        self.assertEqual(ph[1].getName(), "bar")
 
 if __name__ == '__main__':
     unittest.main()
