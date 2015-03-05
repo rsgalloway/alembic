@@ -450,11 +450,13 @@ def _deep_getitem(access_func, key):
 
 class DeepDict(dict):
     """
-    Special dict subclass that allows deep dictionary access.
+    Special dict subclass that allows deep dictionary access, renaming when
+    setting items and reflective reparenting.
     """
     def __init__(self, parent):
         super(DeepDict, self).__init__()
         self.parent = parent
+        self.visited = False
 
     def __getitem__(self, item):
         if type(item) == str:
@@ -469,13 +471,14 @@ class DeepDict(dict):
     def __setitem__(self, name, item):
         obj = self.parent
         new = False
-        
+
         if "/" in name:
             names = name.split("/")
             for name in names:
                 try:
                     obj = obj.get_item(name)
                 except KeyError:
+                    # automatically create missing nodes
                     if name != names[-1]:
                         if type(item) == Property:
                             child = obj.properties[name] = Property()
@@ -487,9 +490,17 @@ class DeepDict(dict):
             if new is False:
                 obj = obj.parent
             return obj.set_item(name, item)
-       
+      
+        # make reparenting reflective (remove item from old parent)
+        if item._parent:
+            if type(item) == Property and name in item.parent._prop_dict.keys():
+                super(DeepDict, item.parent._prop_dict).__delitem__(name)
+            elif name in item.parent._child_dict.keys():
+                super(DeepDict, item.parent._child_dict).__delitem__(name)
+
         item._name = name
         item._parent = obj
+        self.visited = True
         return super(DeepDict, self).__setitem__(name, item)
 
     def remove(self, key):
@@ -1376,7 +1387,7 @@ class Object(object):
     @property
     def children(self):
         """Returns children sub-tree accessor. """
-        if not self._child_dict and self.iobject:
+        if not self._child_dict.visited and self.iobject:
             for i in range(self.iobject.getNumChildren()):
                 child = wrap(
                     iobject = self.iobject.getChild(i),
@@ -1388,7 +1399,7 @@ class Object(object):
     @property
     def properties(self):
         """Properties accessor."""
-        if not self._prop_dict and self.iobject:
+        if not self._prop_dict.visited and self.iobject:
             props = self.iobject.getProperties()
             for i in range(len(props.propertyheaders)):
                 prop = Property(
