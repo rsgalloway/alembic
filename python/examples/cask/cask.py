@@ -493,10 +493,10 @@ class DeepDict(dict):
       
         # make reparenting reflective (remove item from old parent)
         if item._parent:
-            if type(item) == Property and name in item.parent._prop_dict.keys():
-                super(DeepDict, item.parent._prop_dict).__delitem__(name)
-            elif name in item.parent._child_dict.keys():
-                super(DeepDict, item.parent._child_dict).__delitem__(name)
+            if type(item) == Property and item._name in item._parent._prop_dict.keys():
+                super(DeepDict, item._parent._prop_dict).__delitem__(item._name)
+            elif item._name in item._parent._child_dict.keys():
+                super(DeepDict, item._parent._child_dict).__delitem__(item._name)
 
         item._name = name
         item._parent = obj

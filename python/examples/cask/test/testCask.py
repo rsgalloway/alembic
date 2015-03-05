@@ -991,6 +991,13 @@ class Test3_Issues(unittest.TestCase):
         self.assertEqual(len(y.properties), 0)
         self.assertTrue("z" in b.properties.keys())
 
+        # try to duplicate d with a new name
+        a.top.children["e"] = d
+        self.assertEqual(d.name, "e")
+        self.assertTrue("e" in a.top.children.keys())
+        self.assertTrue("d" not in a.top.children.keys())
+        self.assertRaises(KeyError, a.top.children.__getitem__, "d")
+
     def test_issue_23(self):
         """github issue #23: preserve user properties"""
 
