@@ -42,7 +42,7 @@ into high level convenience methods.
 
 More information can be found at http://docs.alembic.io/python/cask.html
 """
-__version__ = "0.9.5a"
+__version__ = "0.9.6"
 
 import os
 import re
@@ -121,258 +121,132 @@ def uint32(n):
 def uint64(n):
     return ctypes.c_uint64(n).value
 
-# index of property class by value or name
-OPROPERTIES_BY_VALUE = {
-    bool: {
-        'scalar': alembic.Abc.OBoolProperty,
-        'array': alembic.Abc.OBoolArrayProperty,
-    },
-    float: {
-        'scalar': alembic.Abc.OFloatProperty,
-        'array': alembic.Abc.OFloatArrayProperty,
-    },
-    int: {
-        'scalar': alembic.Abc.OInt32Property,
-        'array': alembic.Abc.OInt32ArrayProperty,
-    },
-    str: {
-        'scalar': alembic.Abc.OStringProperty,
-        'array': alembic.Abc.OStringArrayProperty,
-    },
-    int8: {
-        'scalar': alembic.Abc.OCharProperty,
-        'array': alembic.Abc.OCharArrayProperty,
-    },
-    int16: {
-        'scalar': alembic.Abc.OInt16Property,
-        'array': alembic.Abc.OInt16ArrayProperty,
-    },
-    int32: {
-        'scalar': alembic.Abc.OInt32Property,
-        'array': alembic.Abc.OInt32ArrayProperty,
-    },
-    int64: {
-        'scalar': alembic.Abc.OInt64Property,
-        'array': alembic.Abc.OInt64ArrayProperty,
-    },
-    uint8: {
-        'scalar': alembic.Abc.OUcharProperty,
-        'array': alembic.Abc.OUcharArrayProperty,
-    },
-    uint16: {
-        'scalar': alembic.Abc.OUInt16Property,
-        'array': alembic.Abc.OUInt16ArrayProperty,
-    },
-    uint32: {
-        'scalar': alembic.Abc.OUInt32Property,
-        'array': alembic.Abc.OUInt32ArrayProperty,
-    },
-    uint64: {
-        'scalar': alembic.Abc.OUInt64Property,
-        'array': alembic.Abc.OUInt64ArrayProperty,
-    },
-    imath.BoolArray: {
-        'scalar': alembic.Abc.OBoolArrayProperty,
-        'array': alembic.Abc.OBoolArrayProperty,
-    },
-    imath.M33f: {
-        'scalar': alembic.Abc.OM33fProperty,
-        'array': alembic.Abc.OM33fArrayProperty,
-    },
-    imath.M33d: {
-        'scalar': alembic.Abc.OM33dProperty,
-        'array': alembic.Abc.OM33dArrayProperty,
-    },
-    imath.M44f: {
-        'scalar': alembic.Abc.OM44fProperty,
-        'array': alembic.Abc.OM44fArrayProperty,
-    },
-    imath.M44d: {
-        'scalar': alembic.Abc.OM44dProperty,
-        'array': alembic.Abc.OM44dArrayProperty,
-    },
-    imath.V2fArray: {
-        'scalar': alembic.Abc.OV2fArrayProperty,
-        'array': alembic.Abc.OV2fArrayProperty,
-    },
-    imath.V3fArray: {
-        'scalar': alembic.Abc.OV3fArrayProperty,
-        'array': alembic.Abc.OV3fArrayProperty,
-    },
-    imath.V3dArray: {
-        'scalar': alembic.Abc.OV3dArrayProperty,
-        'array': alembic.Abc.OV3dArrayProperty,
-    },
-    imath.V3d: {
-        'scalar': alembic.Abc.OV3dProperty,
-        'array': alembic.Abc.OV3dArrayProperty,
-    },
-    imath.V3i: {
-        'scalar': alembic.Abc.OV3iProperty,
-        'array': alembic.Abc.OV3iArrayProperty,
-    },
-    imath.V3f: {
-        'scalar': alembic.Abc.OV3fProperty,
-        'array': alembic.Abc.OV3fArrayProperty,
-    },
-    imath.UnsignedCharArray: {
-        'scalar': alembic.Abc.OUcharArrayProperty,
-        'array': alembic.Abc.OUcharArrayProperty,
-    },
-    imath.UnsignedIntArray: {
-        'scalar': alembic.Abc.OUInt32ArrayProperty,
-        'array': alembic.Abc.OUInt32ArrayProperty,
-    },
-    imath.IntArray: {
-        'scalar': alembic.Abc.OInt32ArrayProperty,
-        'array': alembic.Abc.OInt32ArrayProperty,
-    },
-    imath.FloatArray: {
-        'scalar': alembic.Abc.OFloatArrayProperty,
-        'array': alembic.Abc.OFloatArrayProperty,
-    },
-    imath.DoubleArray: {
-        'scalar': alembic.Abc.ODoubleArrayProperty,
-        'array': alembic.Abc.ODoubleArrayProperty,
-    },
-    imath.StringArray: {
-        'scalar': alembic.Abc.OStringArrayProperty,
-        'array': alembic.Abc.OStringArrayProperty,
-    },
-    imath.Box2s: {
-        'scalar': alembic.Abc.OBox2sProperty,
-        'array': alembic.Abc.OBox2sArrayProperty,
-    },
-    imath.Box2i: {
-        'scalar': alembic.Abc.OBox2iProperty,
-        'array': alembic.Abc.OBox2iArrayProperty,
-    },
-    imath.Box2d: {
-        'scalar': alembic.Abc.OBox2dProperty,
-        'array': alembic.Abc.OBox2dArrayProperty,
-    },
-    imath.Box2f: {
-        'scalar': alembic.Abc.OBox2fProperty,
-        'array': alembic.Abc.OBox2fArrayProperty,
-    },
-    imath.Box3s: {
-        'scalar': alembic.Abc.OBox3sProperty,
-        'array': alembic.Abc.OBox3sArrayProperty,
-    },
-    imath.Box3i: {
-        'scalar': alembic.Abc.OBox3iProperty,
-        'array': alembic.Abc.OBox3iArrayProperty,
-    },
-    imath.Box3d: {
-        'scalar': alembic.Abc.OBox3dProperty,
-        'array': alembic.Abc.OBox3dArrayProperty,
-    },
-    imath.Box3f: {
-        'scalar': alembic.Abc.OBox3fProperty,
-        'array': alembic.Abc.OBox3fArrayProperty,
-    },
-    imath.Color4c: {
-        'scalar': alembic.Abc.OC4cProperty,
-        'array': alembic.Abc.OC4cArrayProperty,
-    },
-    imath.Color3f: {
-        'scalar': alembic.Abc.OC3fProperty,
-        'array': alembic.Abc.OC3fArrayProperty,
-    },
-    imath.C3fArray: {
-        'scalar': alembic.Abc.OC3fArrayProperty,
-        'array': alembic.Abc.OC3fArrayProperty,
-    }
+# Python class mapping to Imath array class
+IMATH_ARRAYS_BY_TYPE = {
+    bool: imath.BoolArray,
+    float: imath.FloatArray,
+    imath.Box2d: imath.Box2dArray,
+    imath.Box2f: imath.Box2fArray,
+    imath.Box2i: imath.Box2iArray,
+    imath.Box2s: imath.Box2sArray,
+    imath.Box3d: imath.Box3dArray,
+    imath.Box3f: imath.Box3fArray,
+    imath.Box3i: imath.Box3iArray,
+    imath.Box3s: imath.Box3sArray,
+    imath.Color3c: imath.C3cArray,
+    imath.Color3f: imath.C3fArray,
+    imath.Color4c: imath.C4cArray,
+    imath.Color4f: imath.C4fArray,
+    imath.M33d: imath.M33dArray,
+    imath.M33f: imath.M33fArray,
+    imath.M44d: imath.M44dArray,
+    imath.M44f: imath.M44fArray,
+    imath.V2d: imath.V2dArray,
+    imath.V2f: imath.V2fArray,
+    imath.V2i: imath.V2iArray,
+    imath.V2s: imath.V2sArray,
+    imath.V3d: imath.V3dArray,
+    imath.V3f: imath.V3fArray,
+    imath.V3i: imath.V3iArray,
+    imath.V3s: imath.V3sArray,
+    imath.V4d: imath.V4dArray,
+    imath.V4f: imath.V4fArray,
+    imath.V4i: imath.V4iArray,
+    imath.V4s: imath.V4sArray,
+    int: imath.IntArray,
+    str: imath.StringArray,
+    uint8: imath.UnsignedCharArray,
+    uint16: imath.UnsignedShortArray,
+    uint32: imath.UnsignedIntArray,
 }
 
-# index of property class by POD, extent
-OPROPERTIES_BY_POD = {
-    (alembic.Util.POD.kBooleanPOD, 1): OPROPERTIES_BY_VALUE.get(bool),
-    (alembic.Util.POD.kStringPOD, 1): OPROPERTIES_BY_VALUE.get(str),
-    (alembic.Util.POD.kInt8POD, 1): OPROPERTIES_BY_VALUE.get(int8),
-    (alembic.Util.POD.kInt16POD, 1): OPROPERTIES_BY_VALUE.get(int16),
-    (alembic.Util.POD.kInt32POD, 1): OPROPERTIES_BY_VALUE.get(int32),
-    (alembic.Util.POD.kInt64POD, 1): OPROPERTIES_BY_VALUE.get(int64),
-    (alembic.Util.POD.kUint8POD, 1): OPROPERTIES_BY_VALUE.get(uint8),
-    (alembic.Util.POD.kUint16POD, 1): OPROPERTIES_BY_VALUE.get(uint16),
-    (alembic.Util.POD.kUint32POD, 1): OPROPERTIES_BY_VALUE.get(uint32),
-    (alembic.Util.POD.kUint64POD, 1): OPROPERTIES_BY_VALUE.get(uint64),
-    (alembic.Util.POD.kFloat32POD, 1): OPROPERTIES_BY_VALUE.get(float),
-    (alembic.Util.POD.kFloat32POD, 3): OPROPERTIES_BY_VALUE.get(imath.V3f),
-    (alembic.Util.POD.kUint8POD, 4): OPROPERTIES_BY_VALUE.get(imath.Color4c),
-    (alembic.Util.POD.kUint8POD, 5): OPROPERTIES_BY_VALUE.get(uint8),
-    (alembic.Util.POD.kFloat32POD, 6): OPROPERTIES_BY_VALUE.get(imath.Box3f),
-    (alembic.Util.POD.kFloat64POD, 6): OPROPERTIES_BY_VALUE.get(imath.Box3d),
-    (alembic.Util.POD.kFloat32POD, 9): OPROPERTIES_BY_VALUE.get(imath.M33f),
-    (alembic.Util.POD.kFloat64POD, 9): OPROPERTIES_BY_VALUE.get(imath.M33d),
-    (alembic.Util.POD.kFloat32POD, 16): OPROPERTIES_BY_VALUE.get(imath.M44f),
-    (alembic.Util.POD.kFloat64POD, 16): OPROPERTIES_BY_VALUE.get(imath.M44d),
-}
-
-# index of property class by reserved name
-OPROPERTIES_BY_NAME = {
-    ".shaderNames": OPROPERTIES_BY_VALUE.get(str),
-    'color': OPROPERTIES_BY_VALUE.get(imath.Color3f),
-    'colour': OPROPERTIES_BY_VALUE.get(imath.Color3f),
-    'geomColors': OPROPERTIES_BY_VALUE.get(imath.C3fArray),
-    'shadow_color': OPROPERTIES_BY_VALUE.get(imath.Color3f),
-    'shadow_colour': OPROPERTIES_BY_VALUE.get(imath.Color3f),
-    'slideMap': OPROPERTIES_BY_VALUE.get(str),
-    "visible": OPROPERTIES_BY_VALUE.get(int8),
+# Python class mapping to Alembic POD, extent
+POD_EXTENT = {
+    bool: (alembic.Util.POD.kBooleanPOD, -1),
+    uint8: (alembic.Util.POD.kUint8POD, -1),
+    int8: (alembic.Util.POD.kInt8POD, -1),
+    uint16: (alembic.Util.POD.kUint16POD, -1),
+    int16: (alembic.Util.POD.kInt16POD, -1),
+    uint32: (alembic.Util.POD.kUint32POD, -1),
+    int: (alembic.Util.POD.kInt32POD, -1),
+    int32: (alembic.Util.POD.kInt32POD, -1),
+    uint64: (alembic.Util.POD.kUint64POD, -1),
+    int64: (alembic.Util.POD.kInt64POD, -1),
+    #float: (alembic.Util.POD.kFloat16POD, -1),
+    #float: (alembic.Util.POD.kFloat32POD, -1),
+    float: (alembic.Util.POD.kFloat64POD, -1),
+    str: (alembic.Util.POD.kStringPOD, -1),
+    #str: (alembic.Util.POD.kWstringPOD, -1),
+    imath.V3f: (alembic.Util.POD.kFloat32POD, -1),
+    imath.Color4c: (alembic.Util.POD.kUint8POD, -1),
+    imath.Box3f: (alembic.Util.POD.kFloat32POD, 6),
+    imath.Box3d: (alembic.Util.POD.kFloat64POD, 6),
+    imath.M33f: (alembic.Util.POD.kFloat32POD, 9),
+    imath.M33d: (alembic.Util.POD.kFloat64POD, 9),
+    imath.M44f: (alembic.Util.POD.kFloat32POD, 16),
+    imath.M44d: (alembic.Util.POD.kFloat64POD, 16),
+    imath.StringArray: (alembic.Util.POD.kStringPOD, -1),
+    imath.UnsignedCharArray: (alembic.Util.POD.kUint8POD, -1),
+    imath.IntArray: (alembic.Util.POD.kInt32POD, -1),
+    imath.FloatArray: (alembic.Util.POD.kFloat32POD, -1),
+    imath.DoubleArray: (alembic.Util.POD.kFloat64POD, -1),
+    #: (alembic.Util.POD.kNumPlainOldDataTypes, -1),
+    #: (alembic.Util.POD.kUnknownPOD, -1),
 }
 
 _COMPOUND_PROPERTY_VALUE_ERROR_ = "Compound properties cannot have values"
 
-class UnknownPropertyType(Exception):
-    """Exception class for unhandled property classes"""
-
-def get_simple_oprop_class(prop, klass=None):
+def get_simple_oprop_class(prop):
     """
     Returns the alembic simple property class based on a given name and value.
 
     :param prop: Property object
-    :param klass: force a specific oproperty class
-    :return: Alembic property class
+    :return: Alembic OProperty class
     """
-
     if prop.is_compound():
         return alembic.Abc.OCompoundProperty
-
-    # we can't create the property if there are no values
-    if len(prop.values) == 0 and not prop.iobject:
-        return None
-    
-    # get a handle on the lowest level value
     value = prop.values[0] if len(prop.values) > 0 else []
-    value0 = value[0] if type(value) in (set, list) and len(value) > 0 else value
-
-    # look for property class by reserved name
-    if not klass:
-        klass = OPROPERTIES_BY_NAME.get(prop.name)
-        is_array = (type(value) in [set, list] and len(value) > 1)
-
-    # look for property class by POD, extent
-    if not klass and prop.iobject:
-        klass = OPROPERTIES_BY_POD.get((
-            prop.iobject.getDataType().getPod(),
-            prop.iobject.getDataType().getExtent()
-        ))
+    if prop.iobject:
         is_array = prop.iobject.isArray()
-
-    # else, look for property class by value type
-    if not klass:
-        klass = OPROPERTIES_BY_VALUE.get(type(value0))
-        is_array = (type(value) in [set, list] and len(value) > 1)
-
-    if klass: 
-        return klass.get({True:'array', False:'scalar'}.get(is_array))
-    
     else:
-        raise UnknownPropertyType("Unknown property class for %s" % prop.name)
-
+        is_array = (type(value) in [set, list] and len(value) > 1)
+    if is_array:
+        return alembic.Abc.OArrayProperty
+    return alembic.Abc.OScalarProperty
+    
 def _delist(val):
-    """returns single value if list len is 1"""
+    """Returns single value if list len is 1"""
     return val[0] if type(val) in [list, set] and len(val) == 1 else val
+
+def python_to_imath(value):
+    """Converts Python lists to Imath arrays."""
+    if value in IMATH_ARRAYS_BY_TYPE.values():
+        return value
+    value = _delist(value)
+    is_array = type(value) in (set, list)
+    value0 = value[0] if is_array and len(value) > 0 else value
+    if is_array:
+        new_value = IMATH_ARRAYS_BY_TYPE.get(type(value0))(len(value))
+        for i, v in enumerate(value):
+            new_value[i] = v
+        return new_value
+    return value
+
+def get_pod_extent(prop):
+    """Returns POD, extent tuple for given Property."""
+    if len(prop.values) <= 0:
+        return 1
+    value = _delist(prop.values[0])
+    is_array = type(value) in (set, list)
+    value0 = value[0] if is_array and len(value) > 0 else value
+    pod, extent = POD_EXTENT.get(type(value0))
+    if extent <= 0:
+       extent = (len(value0)
+            if prop.is_scalar() and
+            (type(value0) not in (str, unicode) and hasattr(value0, '__len__'))
+            else 1
+        )
+    return (pod, extent)
 
 def wrapped(func):
     """
@@ -453,9 +327,10 @@ class DeepDict(dict):
     Special dict subclass that allows deep dictionary access, renaming when
     setting items and reflective reparenting.
     """
-    def __init__(self, parent):
+    def __init__(self, parent, klass=None):
         super(DeepDict, self).__init__()
         self.parent = parent
+        self.klass = klass
         self.visited = False
 
     def __getitem__(self, item):
@@ -469,6 +344,9 @@ class DeepDict(dict):
             return super(DeepDict, self).__getitem__(item)
 
     def __setitem__(self, name, item):
+        if self.klass and not isinstance(item, self.klass):
+            raise Exception("Invalid item class: %s" % item.type())
+
         obj = self.parent
         new = False
 
@@ -476,7 +354,10 @@ class DeepDict(dict):
             names = name.split("/")
             for name in names:
                 try:
-                    obj = obj.get_item(name)
+                    if type(item) == Property:
+                        obj = obj.properties[name]
+                    else:
+                        obj = obj.children[name]
                 except KeyError:
                     # automatically create missing nodes
                     if name != names[-1]:
@@ -809,11 +690,12 @@ class Property(object):
         self._parent = None
         self._name = name
         self._metadata = {}
+        self._datatype = None
         self._iobject = iproperty
         self._oobject = None
         self._klass = klass
         self._values = []
-        self._prop_dict = DeepDict(self)
+        self._prop_dict = DeepDict(self, Property)
         self.time_sampling_id = time_sampling_id
 
         # if we have an iproperty, get some values from it
@@ -845,11 +727,14 @@ class Property(object):
     def __get_oobject(self):
         """sets oproperty"""
         parent = None
+
         if not self._oobject and self.parent:
             if self.iobject:
                 meta = self.iobject.getMetaData()
             else:
                 meta = alembic.AbcCoreAbstract.MetaData()
+            for k, v in self.metadata.items():
+                meta.set(k, v)
             if not self._klass:
                 self._klass = get_simple_oprop_class(self)
             if self.is_compound() and self.iobject:
@@ -863,10 +748,14 @@ class Property(object):
                 # pre-existing property exists, see Property.__get_oobject
                 pass
             elif parent and self._klass:
-                self._oobject = self._klass(parent,
-                                            self.name,
-                                            meta,
-                                            self.time_sampling_id)
+                if self.is_compound():
+                    self._oobject = self._klass(
+                        parent, self.name, meta, self.time_sampling_id
+                    )
+                elif self.datatype:
+                    self._oobject = self._klass(
+                        parent, self.name, self.datatype, meta, self.time_sampling_id
+                    )
         return self._oobject
 
     def __set_oobject(self, oobject):
@@ -875,6 +764,14 @@ class Property(object):
 
     oobject = property(__get_oobject, __set_oobject,
                        doc="Internal Alembic OProperty object.")
+
+    def is_scalar(self):
+        if not self._klass:
+            self._klass = get_simple_oprop_class(self)
+        return self._klass == alembic.Abc.OScalarProperty
+
+    def is_array(self):
+        return not self.is_scalar()
 
     def __get_parent(self):
         """gets parent"""
@@ -911,7 +808,7 @@ class Property(object):
                     doc="Gets and sets the property name.")
 
     def __get_metadata(self):
-        """returns metadata dict"""
+        """Returns metadata dict."""
         if not self._metadata and self.iobject:
             meta = self.iobject.getMetaData()
             for field in meta.serialize().split(';'):
@@ -922,11 +819,31 @@ class Property(object):
         return self._metadata
 
     def __set_metadata(self, metadata):
-        """sets metadata dict"""
+        """Sets metadata dict."""
         self._metadata = metadata
 
     metadata = property(__get_metadata, __set_metadata,
                         doc="Metadata as a dict.")
+
+    def __get_datatype(self):
+        """Returns the datatype object."""
+        if not self._datatype:
+            if self.iobject:
+                self._datatype = self.iobject.getDataType()
+            elif len(self.values) > 0:
+                pod, extent = get_pod_extent(self)
+                if not pod:
+                    raise Exception("Unknown datatype for %s: %s" 
+                        % (self.name, v0))
+                self._datatype = alembic.AbcCoreAbstract.DataType(pod, extent)
+        return self._datatype
+
+    def __set_datatype(self, datatype):
+        """Sets the datatype object."""
+        self._datatype = datatype
+
+    datatype = property(__get_datatype, __set_datatype,
+                        doc="DataType object.")
 
     def type(self):
         """Returns the name of the class."""
@@ -935,14 +852,12 @@ class Property(object):
         return self.__class__.__name__
 
     def pod(self):
-        if self.iobject:
-            return self.iobject.getDataType().getPod()
-        return None
+        """Returns the property's datatype POD value."""
+        return self.datatype.getPod()
 
     def extent(self):
-        if self.iobject:
-            return self.iobject.getDataType().getExtent()
-        return None
+        """Returns the property's datatype extent."""
+        return self.datatype.getExtent()
 
     def archive(self):
         """Returns the Archive for this property."""
@@ -1092,21 +1007,6 @@ class Property(object):
             index = len(self._values)
         elif index is None:
             index = self.__get_sample_index(time, frame)
-        if self._klass is None:
-            self._klass = get_simple_oprop_class(self)
-        if self._klass == alembic.Abc.OFloatArrayProperty:
-            farray = imath.FloatArray(len(value))
-            for i, val in enumerate(value):
-                farray[i] = val
-            value = farray
-        elif self._klass == alembic.Abc.OC3fProperty:
-            value = imath.Color3f(value[0], value[1], value[2])
-        elif self._klass == alembic.Abc.OFloatProperty:
-            value = float(value)
-        elif self._klass == alembic.Abc.OStringProperty:
-            value = str(value)
-        if type(value) == imath.UnsignedIntArray:
-            value = [int(val) for val in value]
         if index < len(self.values):
             self.values[index] = value
         else:
@@ -1114,7 +1014,7 @@ class Property(object):
 
     def clear_properties(self):
         """Clears the properties container."""
-        self._prop_dict = DeepDict(self)
+        self._prop_dict = DeepDict(self, Property)
 
     def clear_values(self):
         """Clears the values container."""
@@ -1140,8 +1040,11 @@ class Property(object):
         if they don't exist, and sets values.
         """
         if self.oobject and not self.is_compound():
+            if self.name in (".selfBnds", ".childBnds"):
+                self.oobject.getMetaData().set("interpretation", "box")
             for value in self.values:
                 try:
+                    value = python_to_imath(value)
                     self.oobject.setValue(value)
                 except Exception, err:
                     print "Error setting value on %s: %s %s\n%s" \
@@ -1150,11 +1053,14 @@ class Property(object):
         else:
             for prop in self.properties.values():
                 up = False
-                if not prop.iobject and prop.parent.name == ".userProperties":
-                    up = Property()
-                    up._oobject = prop.object().oobject.getSchema().getUserProperties()
-                    up.properties[prop.name] = prop
-                    prop.parent = up
+                if not prop.iobject and not prop.object().iobject:
+                    if prop.name == ".childBnds":
+                        prop._oobject = prop.object().oobject.getSchema().getChildBoundsProperty()
+                    elif prop.parent.name == ".userProperties":
+                        up = Property()
+                        up._oobject = prop.object().oobject.getSchema().getUserProperties()
+                        up.properties[prop.name] = prop
+                        prop.parent = up
                 else:
                     prop.parent = self
                 prop.save()
@@ -1190,8 +1096,8 @@ class Object(object):
         self._parent = None
         self._is_animated = None
         self._tsid = time_sampling_id
-        self._prop_dict = DeepDict(self)
-        self._child_dict = DeepDict(self)
+        self._prop_dict = DeepDict(self, Property)
+        self._child_dict = DeepDict(self, Object)
 
         # init some stuff
         self.clear_all()
@@ -1237,7 +1143,8 @@ class Object(object):
             meta = self.iobject.getMetaData()
         else:
             meta = alembic.AbcCoreAbstract.MetaData()
-
+        for k, v in self.metadata.items():
+            meta.set(k, v)
         if self._oobject is None:
             if self.iobject:
                 self._klass = alembic.Abc.OObject
@@ -1516,7 +1423,7 @@ class Object(object):
 
     def clear_properties(self):
         """Clears the internal properties container."""
-        self._prop_dict = DeepDict(self)
+        self._prop_dict = DeepDict(self, Property)
 
     def clear_samples(self):
         """Clears the internal samples container."""
@@ -1525,7 +1432,7 @@ class Object(object):
 
     def clear_children(self):
         """Clears the internal children container."""
-        self._child_dict = DeepDict(self)
+        self._child_dict = DeepDict(self, Object)
 
     def clear_all(self):
         self.clear_properties()
@@ -1559,12 +1466,16 @@ class Object(object):
             del prop
         if not self._osamples:
             self._set_default_sample()
-        #FIXME: skip cameras because they have no schema
-        if self.type() == 'Camera':
+        # OCameras have no getSchema method, properties written explicitly
+        if self.type() == 'Camera' and self.iobject:
             return
         for sample in self._osamples:
             try:
-                obj.getSchema().set(sample)
+                if self.type() == 'Light' \
+                   and type(sample) == alembic.AbcGeom.CameraSample:
+                    obj.getSchema().setCameraSample(sample)
+                else:
+                    obj.getSchema().set(sample)
             except AttributeError, err:
                 print "Error setting sample on %s: %s\n%s" \
                     %(self.name, sample, err)

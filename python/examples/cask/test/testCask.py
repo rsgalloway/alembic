@@ -527,16 +527,187 @@ class Test1_Write(unittest.TestCase):
         # test deep set item when middle nodes do not exist
         try:
             x = t.children["A/foo/C/D/bar"] = cask.Xform()
-            p = x.properties[".xform/.userProperties/foo"] = cask.Property()
+            foo = x.properties[".xform/.userProperties/foo"] = cask.Property()
+            foo.set_value(1.0)
         except KeyError:
             raise
 
         # assert that the created nodes are Xforms
         self.assertEqual(t.children["A/foo"].type(), "Xform")
         self.assertEqual(t.children["A/foo/C/D/bar"].type(), "Xform")
+        self.assertEqual(foo.type(), "Property")
+        self.assertEqual(foo.values[0], 1.0)
+
+        # assert "a" still exists in "A"
+        self.assertTrue("a" in t.children["A"].properties.keys())
 
         # write the archive
         a.write_to_file(filename)
+
+        # re-open and create add'l properties
+        a = cask.Archive(filename)
+        x = a.top.children["A/foo/C/D/bar"]
+
+        # create new user property
+        bar = x.properties[".xform/.userProperties/bar"] = cask.Property()
+        bar.set_value(2.0)
+        self.assertTrue("bar" in x.properties[".xform/.userProperties"].properties)
+
+        # assert that "foo" was not clobbered when we created "bar"
+        self.assertTrue("foo" in x.properties[".xform/.userProperties"].properties)
+        foo = x.properties[".xform/.userProperties/foo"]
+        self.assertEqual(foo.values[0], 1.0)
+
+    def test_light_shader(self):
+        filename = os.path.join(TEMPDIR, "cask_light_shader.abc")
+
+        a = cask.Archive()
+
+        # create light and material
+        light = a.top.children["spotlight"] = cask.Light()
+        mat = light.properties[".materials"] = cask.Property()
+
+        # set shader name
+        names = mat.properties[".shaderNames"] = cask.Property()
+        names.set_value(["prman.light", "spot_lgt"])
+
+        # set shader values
+        shader = mat.properties["prman.light.params"] = cask.Property()
+        p1 = shader.properties["exposure"] = cask.Property()
+        p1.set_value(1.0)
+        p2 = shader.properties["specular"] = cask.Property()
+        p2.set_value(0.1)
+
+        # set light camera data
+        samp = alembic.AbcGeom.CameraSample(-0.35, 0.75, 0.1, 0.5)
+        light.set_sample(samp)
+        samp.setNearClippingPlane(0.0)
+        samp.setFarClippingPlane(1000.0)
+        samp.setHorizontalAperture(2.8)
+        samp.setVerticalAperture(2.8)
+        samp.setFocalLength(50)
+        light.set_sample(samp)
+
+        # export
+        a.write_to_file(filename)
+
+    def test_pod_extent(self):
+        filename = os.path.join(TEMPDIR, "cask_pod_extent.abc")
+
+        extent = 5
+        v = imath.UnsignedCharArray(extent)
+        for i in range(0, extent):
+            v[i] = i
+
+        a = cask.Archive()
+
+        # create test properties
+        foo = a.top.children["foo"] = cask.Xform()
+        bar = foo.properties["bar"] = cask.Property()
+        baz = foo.properties["baz"] = cask.Property()
+        qux = foo.properties["qux"] = cask.Property()
+        quux = foo.properties["quux"] = cask.Property()
+        garply = foo.properties["garply"] = cask.Property()
+        waldo = foo.properties["waldo"] = cask.Property()
+        fred = foo.properties["fred"] = cask.Property()
+        
+        # set test values
+        v = imath.UnsignedCharArray(5)
+        for i in range(0, 5):
+            v[i] = i
+        bar.set_value(v)
+        baz.set_value(["a", "b", "c"])
+        qux.set_value(imath.Box3d())
+        quux.set_value(imath.M33d())
+        garply.set_value(imath.M44d())
+        waldo.set_value(1)
+        fred.set_value([1, 2, 3, 4])
+       
+        # export
+        a.write_to_file(filename)
+        a.close()
+
+        # reimport the test file
+        a = cask.Archive(filename)
+
+        # recover the test properties
+        foo = a.top.children["foo"]
+        bar = foo.properties["bar"]
+        baz = foo.properties["baz"]
+        qux = foo.properties["qux"]
+        quux = foo.properties["quux"]
+        garply = foo.properties["garply"]
+        waldo = foo.properties["waldo"]
+        fred = foo.properties["fred"]
+        
+        # assert pod, extent values
+        self.assertEqual(bar.extent(), 5)
+        self.assertEqual(bar.pod(), alembic.Util.POD.kUint8POD)
+        self.assertEqual(baz.extent(), 1)
+        self.assertEqual(baz.pod(), alembic.Util.POD.kStringPOD)
+        self.assertEqual(qux.extent(), 6)
+        self.assertEqual(qux.pod(), alembic.Util.POD.kFloat64POD)
+        self.assertEqual(quux.extent(), 9)
+        self.assertEqual(quux.pod(), alembic.Util.POD.kFloat64POD)
+        self.assertEqual(garply.extent(), 16)
+        self.assertEqual(garply.pod(), alembic.Util.POD.kFloat64POD)
+        self.assertEqual(waldo.extent(), 1)
+        self.assertEqual(waldo.pod(), alembic.Util.POD.kInt32POD)
+        self.assertEqual(fred.extent(), 1)
+        self.assertEqual(fred.pod(), alembic.Util.POD.kInt32POD)
+
+    def test_child_bounds(self):
+        filename_1 = os.path.join(TEMPDIR, "cask_child_bounds_1.abc")
+        filename_2 = os.path.join(TEMPDIR, "cask_child_bounds_2.abc")
+        filename_3 = os.path.join(TEMPDIR, "cask_child_bounds_3.abc")
+
+        # create initial archive with initial value
+        bounds = imath.Box3d(
+            imath.V3d(1, 1, 1), imath.V3d(1, 1, 1)
+        )
+        a = cask.Archive()
+        x = a.top.children["foo"] = cask.Xform()
+        p = x.properties[".xform/.childBnds"] = cask.Property()
+        p.set_value(bounds)
+        self.assertEqual(p.values[0], bounds)
+        a.write_to_file(filename_1)
+        a.close()
+
+        # verify export / value
+        b = cask.Archive(filename_1)
+        p = b.top.children["foo"].properties[".xform/.childBnds"]
+        self.assertEqual(len(p.values), 1)
+        self.assertEqual(p.values[0], bounds)
+        self.assertEqual(p.metadata.get("interpretation"), "box")
+        
+        # set a new child bounds value and export
+        bounds = imath.Box3d(
+            imath.V3d(-5, -5, -5), imath.V3d(5, 5, 5)
+        )
+        p.values[0] = bounds
+        self.assertEqual(p.values[0], bounds)
+        b.write_to_file(filename_2)
+        b.close()
+
+        # verify the updated value in the export
+        c = cask.Archive(filename_2)
+        p = c.top.children["foo"].properties[".xform/.childBnds"]
+        self.assertEqual(len(p.values), 1)
+        self.assertEqual(p.values[0], bounds)
+        self.assertEqual(p.metadata.get("interpretation"), "box")
+
+        # reinitialize the property and export
+        p = c.top.children["foo"].properties[".xform/.childBnds"] = cask.Property()
+        p.set_value(bounds)
+        c.write_to_file(filename_3)
+        c.close()
+
+        # re-verify the updated value in the export
+        d = cask.Archive(filename_3)
+        p = d.top.children["foo"].properties[".xform/.childBnds"]
+        self.assertEqual(len(p.values), 1)
+        self.assertEqual(p.values[0], bounds)
+        self.assertEqual(p.metadata.get("interpretation"), "box")
 
 class Test2_Read(unittest.TestCase):
     def test_verify_write_basic(self):
@@ -934,7 +1105,11 @@ class Test3_Issues(unittest.TestCase):
         xf = a.top.children["renderCamXform"] = cask.Xform()
         cam = xf.children["renderCamShape"] = cask.Camera()
 
-        # add some sample data
+        # set camera smaple
+        samp = alembic.AbcGeom.CameraSample(-0.35, 0.75, 0.1, 0.5)
+        cam.set_sample(samp)
+
+        # set xform samples
         for i in range(24):
             samp = alembic.AbcGeom.XformSample()
             samp.setTranslation(imath.V3d(i, 2.0, 3.0))
@@ -947,9 +1122,11 @@ class Test3_Issues(unittest.TestCase):
         # read the test archive back in and verify results
         a = cask.Archive(test_file)
         xform = a.top.children["renderCamXform"]
+        cam = xform.children["renderCamShape"]
         self.assertEqual(len(a.timesamplings), 2)
         self.assertEqual(xform.time_sampling_id, 1)
         self.assertEqual(len(xform.samples), 24)
+        self.assertEqual(len(cam.samples), 1)
         self.assertEqual(a.start_frame(), 0)
         self.assertEqual(a.end_frame(), 23)
 
@@ -1002,6 +1179,7 @@ class Test3_Issues(unittest.TestCase):
         """github issue #23: preserve user properties"""
 
         test_file = os.path.join(TEMPDIR, "cask_test_issue_23.abc")
+        test_file_2 = os.path.join(TEMPDIR, "cask_test_issue_23_2.abc")
 
         a = cask.Archive()
         x = a.top.children["x"] = cask.Xform()
@@ -1038,6 +1216,37 @@ class Test3_Issues(unittest.TestCase):
         self.assertEqual(len(ph), 2)
         self.assertEqual(ph[0].getName(), "foo")
         self.assertEqual(ph[1].getName(), "bar")
+
+        # recreate these properties and re-export
+        # (test for AttributeError: 'OObject' object has no attribute 'getSchema')
+        p1 = up.properties["foo"] = cask.Property()
+        p2 = up.properties["bar"] = cask.Property()
+        p1.set_value("baz")
+        p2.set_value(2.0)
+        a.write_to_file(test_file_2)
+
+    def test_issue_26(self):
+        """github issue #26: verify .ops and .vals pod and extent"""
+        
+        test_file_1 = os.path.join(TEMPDIR, "cask_test_issue_26.abc")
+
+        # create some scalar properties with array values
+        a = cask.Archive()
+        a.top.children["foo"] = cask.Xform()
+        p1 = a.top.children["foo"].properties["p1"] = cask.Property()
+        p2 = a.top.children["foo"].properties["p2"] = cask.Property()
+        p1.set_value(imath.UnsignedCharArray(6))
+        p2.set_value(imath.DoubleArray(12))
+        a.write_to_file(test_file_1)
+        a.close()
+
+        # open the exported file and assert properties are scalar
+        a = cask.Archive(test_file_1)
+        p1 = a.top.children["foo"].properties["p1"]
+        p2 = a.top.children["foo"].properties["p2"]
+        self.assertTrue(p1.iobject.isScalar())
+        self.assertTrue(p2.iobject.isScalar())
+        a.close()
 
 if __name__ == '__main__':
     unittest.main()
