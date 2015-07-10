@@ -1130,51 +1130,6 @@ class Test3_Issues(unittest.TestCase):
         self.assertEqual(a.start_frame(), 0)
         self.assertEqual(a.end_frame(), 23)
 
-    def test_issue_21(self):
-        """github issue #21: reflective reparenting"""
-
-        test_file = os.path.join(TEMPDIR, "cask_test_issue_21.abc")
-
-        # create an test archive
-        a = cask.Archive()
-        d = a.top.children["a/b/c/d"] = cask.Xform()
-        z = d.properties["x/y/z"] = cask.Property()
-        z.set_value(1.0)
-        a.write_to_file(test_file)
-        a.close()
-
-        # read the archive back in
-        a = cask.Archive(test_file)
-        b = a.top.children["a/b"]
-        d = a.top.children["a/b/c/d"]
-        y = d.properties["x/y"]
-        z = d.properties["x/y/z"]
-
-        # verify initial state
-        self.assertEqual(a.top.children.keys(), ["a"])
-        self.assertEqual(b.children.keys(), ["c"])
-        self.assertEqual(len(b.properties), 1)
-        self.assertTrue("x" in d.properties.keys())
-        
-        # reparent object d, verify it's reflective
-        a.top.children[d.name] = d
-        self.assertEqual(a.top.children.keys(), ["a", "d"])
-        self.assertEqual(len(a.top.children["a/b/c"].children), 0)
-        self.assertTrue("x" in d.properties.keys())
-
-        # reparent property z, verify it's reflective
-        b.properties[z.name] = z
-        self.assertEqual(len(b.properties), 2)
-        self.assertEqual(len(y.properties), 0)
-        self.assertTrue("z" in b.properties.keys())
-
-        # try to duplicate d with a new name
-        a.top.children["e"] = d
-        self.assertEqual(d.name, "e")
-        self.assertTrue("e" in a.top.children.keys())
-        self.assertTrue("d" not in a.top.children.keys())
-        self.assertRaises(KeyError, a.top.children.__getitem__, "d")
-
     def test_issue_23(self):
         """github issue #23: preserve user properties"""
 

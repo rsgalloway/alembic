@@ -42,7 +42,7 @@ into high level convenience methods.
 
 More information can be found at http://docs.alembic.io/python/cask.html
 """
-__version__ = "0.9.6"
+__version__ = "0.9.6e"
 
 import os
 import re
@@ -187,6 +187,7 @@ POD_EXTENT = {
     imath.M44d: (alembic.Util.POD.kFloat64POD, 16),
     imath.StringArray: (alembic.Util.POD.kStringPOD, -1),
     imath.UnsignedCharArray: (alembic.Util.POD.kUint8POD, -1),
+    #imath.UnsignedIntArray: (alembic.Util.POD.kUint32POD, -1),
     imath.IntArray: (alembic.Util.POD.kInt32POD, -1),
     imath.FloatArray: (alembic.Util.POD.kFloat32POD, -1),
     imath.DoubleArray: (alembic.Util.POD.kFloat64POD, -1),
@@ -209,11 +210,11 @@ def get_simple_oprop_class(prop):
     if prop.iobject:
         is_array = prop.iobject.isArray()
     else:
-        is_array = (type(value) in [set, list] and len(value) > 1)
+        is_array = type(value) in [list, set] and len(value) > 1 
     if is_array:
         return alembic.Abc.OArrayProperty
     return alembic.Abc.OScalarProperty
-    
+
 def _delist(val):
     """Returns single value if list len is 1"""
     return val[0] if type(val) in [list, set] and len(val) == 1 else val
@@ -239,7 +240,11 @@ def get_pod_extent(prop):
     value = _delist(prop.values[0])
     is_array = type(value) in (set, list)
     value0 = value[0] if is_array and len(value) > 0 else value
-    pod, extent = POD_EXTENT.get(type(value0))
+    try:
+        pod, extent = POD_EXTENT.get(type(value0))
+    except TypeError as err:
+        print "Error getting pod, extent from", prop, value0
+        return (alembic.Util.POD.kUnknownPOD, 1)
     if extent <= 0:
        extent = (len(value0)
             if prop.is_scalar() and
@@ -313,6 +318,27 @@ def find_iter(obj, name):
             for obj in find_iter(child, name):
                 yield obj
 
+def copy(item, name=None):
+    import copy as _copy
+    name = name or item.name
+    new_item = item.__class__(name=name)
+    if item.metadata:
+        new_item.metadata = _copy.copy(item.metadata)
+    if item._iobject:
+        new_item._iobject = item._iobject
+    new_item.time_sampling_id = item.time_sampling_id
+    if type(item) in Object.__subclasses__():
+        for child in item.children.values():
+            new_item.children[child.name] = copy(child)
+        for prop in item.properties.values():
+            new_item.properties[prop.name] = copy(prop)
+    elif type(item) == Property:
+        if item.datatype:
+            new_item.datatype = item.datatype
+        for prop in item.properties.values():
+            new_item.properties[prop.name] = copy(prop)
+    return new_item
+
 def _deep_getitem(access_func, key):
     """
     Facilitates deep dict get item on DeepDict class.
@@ -341,7 +367,10 @@ class DeepDict(dict):
                 item = item[:-1]
             if "/" in item:
                 return _deep_getitem(self.__getitem__, item)
-            return super(DeepDict, self).__getitem__(item)
+            else:
+                item = super(DeepDict, self).__getitem__(item)
+                item._parent = self.parent
+                return item
 
     def __setitem__(self, name, item):
         if self.klass and not isinstance(item, self.klass):
@@ -372,13 +401,6 @@ class DeepDict(dict):
                 obj = obj.parent
             return obj.set_item(name, item)
       
-        # make reparenting reflective (remove item from old parent)
-        if item._parent:
-            if type(item) == Property and item._name in item._parent._prop_dict.keys():
-                super(DeepDict, item._parent._prop_dict).__delitem__(item._name)
-            elif item._name in item._parent._child_dict.keys():
-                super(DeepDict, item._parent._child_dict).__delitem__(item._name)
-
         item._name = name
         item._parent = obj
         self.visited = True
@@ -661,12 +683,18 @@ class Archive(object):
             self.time_sampling_id = 1
         # create the oarchive
         if not self.oobject:
-            self.oobject = alembic.Abc.CreateArchiveWithInfo(
-                filepath,
-                "cask %s" % __version__,
-                str(self.top.metadata),
-                1, 1
-            )
+            # support for Ogawa archives via CreateArchiveWithInfo
+            # came in Alembic 1.5.7
+            m1, m2, m3 = (int(m) for m in self.using_version().split("."))
+            if m1 ==1 and m2 <= 5 and m3 < 7:
+                self.oobject = alembic.Abc.OArchive(filepath, asOgawa=asOgawa)
+            else:
+                self.oobject = alembic.Abc.CreateArchiveWithInfo(
+                    filepath,
+                    "cask %s" % __version__,
+                    str(self.top.metadata),
+                    1, 1
+                )
             self.top.oobject = self.oobject.getTop()
         # set timesampling objects on the oarchive
         for i, time_sample in smps:
@@ -832,9 +860,9 @@ class Property(object):
                 self._datatype = self.iobject.getDataType()
             elif len(self.values) > 0:
                 pod, extent = get_pod_extent(self)
-                if not pod:
+                if pod is None:
                     raise Exception("Unknown datatype for %s: %s" 
-                        % (self.name, v0))
+                        % (self.name, self.values[0]))
                 self._datatype = alembic.AbcCoreAbstract.DataType(pod, extent)
         return self._datatype
 
@@ -1073,7 +1101,7 @@ class Property(object):
 
 class Object(object):
     """Base I/O Object class."""
-    __sample_class = None
+    _sample_class = None
     def __init__(self, iobject=None, schema=None,
                  time_sampling_id=None, name=None):
         """
@@ -1117,7 +1145,7 @@ class Object(object):
     @property
     def __sample_methods(self):
         """gets this object's sample methods"""
-        return dir(self.__sample_class)
+        return dir(self._sample_class)
 
     def __get_iobject(self):
         """gets iobject"""
@@ -1338,6 +1366,8 @@ class Object(object):
         """
         if index is None:
             index = len(self._osamples)
+        assert type(sample) == self._sample_class,\
+            "Can not set %s on %s object" % (sample.__class__.__name__, self.type())
         self._osamples.insert(index, sample)
 
     def _set_default_sample(self):
@@ -1514,7 +1544,7 @@ class Top(Object):
 
 class Xform(Object):
     """Xform I/O Object subclass."""
-    __sample_class = alembic.AbcGeom.XformSample
+    _sample_class = alembic.AbcGeom.XformSample
     def __init__(self, *args, **kwargs):
         super(Xform, self).__init__(*args, **kwargs)
 
@@ -1540,30 +1570,31 @@ class Xform(Object):
 
 class PolyMesh(Object):
     """PolyMesh I/O Object subclass."""
-    __sample_class = alembic.AbcGeom.OPolyMeshSchemaSample
+    _sample_class = alembic.AbcGeom.OPolyMeshSchemaSample
     def __init__(self, *args, **kwargs):
         super(PolyMesh, self).__init__(*args, **kwargs)
 
 class SubD(Object):
     """SubD I/O Object subclass."""
-    __sample_class = alembic.AbcGeom.OSubDSchemaSample
+    _sample_class = alembic.AbcGeom.OSubDSchemaSample
     def __init__(self, *args, **kwargs):
         super(SubD, self).__init__(*args, **kwargs)
 
 class FaceSet(Object):
     """FaceSet I/O Object subclass."""
-    __sample_class = alembic.AbcGeom.OFaceSetSchemaSample
+    _sample_class = alembic.AbcGeom.OFaceSetSchemaSample
     def __init__(self, *args, **kwargs):
         super(FaceSet, self).__init__(*args, **kwargs)
 
 class Curve(Object):
     """Curve I/O Object subclass."""
-    __sample_class = alembic.AbcGeom.OCurvesSchemaSample
+    _sample_class = alembic.AbcGeom.OCurvesSchemaSample
     def __init__(self, *args, **kwargs):
         super(Curve, self).__init__(*args, **kwargs)
 
 class Camera(Object):
     """Camera I/O Object subclass."""
+    _sample_class = alembic.AbcGeom.CameraSample
     def __init__(self, *args, **kwargs):
         super(Camera, self).__init__(*args, **kwargs)
 
@@ -1572,7 +1603,7 @@ class Camera(Object):
 
 class NuPatch(Object):
     """NuPath I/O Object subclass."""
-    __sample_class = alembic.AbcGeom.ONuPatchSchemaSample
+    _sample_class = alembic.AbcGeom.ONuPatchSchemaSample
     def __init__(self, *args, **kwargs):
         super(NuPatch, self).__init__(*args, **kwargs)
 
@@ -1583,6 +1614,7 @@ class Material(Object):
 
 class Light(Object):
     """Light I/O Object subclass."""
+    _sample_class = alembic.AbcGeom.CameraSample
     def __init__(self, *args, **kwargs):
         super(Light, self).__init__(*args, **kwargs)
 
