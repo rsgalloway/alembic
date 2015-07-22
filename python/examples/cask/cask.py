@@ -42,7 +42,7 @@ into high level convenience methods.
 
 More information can be found at http://docs.alembic.io/python/cask.html
 """
-__version__ = "0.9.6e"
+__version__ = "0.9.6g"
 
 import os
 import re
@@ -178,7 +178,10 @@ POD_EXTENT = {
     str: (alembic.Util.POD.kStringPOD, -1),
     #str: (alembic.Util.POD.kWstringPOD, -1),
     imath.V3f: (alembic.Util.POD.kFloat32POD, -1),
+    imath.Color3c: (alembic.Util.POD.kUint8POD, -1),
+    imath.Color3f: (alembic.Util.POD.kFloat32POD, -1),
     imath.Color4c: (alembic.Util.POD.kUint8POD, -1),
+    imath.Color4f: (alembic.Util.POD.kFloat32POD, -1),
     imath.Box3f: (alembic.Util.POD.kFloat32POD, 6),
     imath.Box3d: (alembic.Util.POD.kFloat64POD, 6),
     imath.M33f: (alembic.Util.POD.kFloat32POD, 9),
@@ -289,7 +292,7 @@ def is_valid(archive):
     except RuntimeError:
         return False
 
-def find(obj, name):
+def find(obj, name=".*", types=None):
     """
     Finds and returns a list of Objects with names matching
     a given regular expression. ::
@@ -298,25 +301,26 @@ def find(obj, name):
         [<PolyMesh "cube1Shape">, <PolyMesh "cube2Shape">]
 
     :param name: Regular expression to match object name
+    :param types: Class type inclusion list
     :return: Sorted list of Object results
     """
-    results = [r for r in find_iter(obj, name)]
+    results = [r for r in find_iter(obj, name, types)]
     return sorted(results, key=lambda x: x.name)
 
-def find_iter(obj, name):
+def find_iter(obj, name=".*", types=None):
     """
     Generator that yields Objects with names matching
     a given regular expression.
 
     :param name: Regular expression to match object name
+    :param types: Class type inclusion list
     :yields: Object with name matching name regex
     """
-    if re.match(name, obj.name):
+    if re.match(name, obj.name) and (types is None or obj.type() in types):
         yield obj
-    else:
-        for child in obj.children.values():
-            for obj in find_iter(child, name):
-                yield obj
+    for child in obj.children.values():
+        for grandchild in find_iter(child, name, types):
+            yield grandchild
 
 def copy(item, name=None):
     import copy as _copy
@@ -1179,6 +1183,8 @@ class Object(object):
             else:
                 self._klass = OOBJECTS.get(self.type())
             if self._klass:
+                if not self.parent:
+                    print "OObject is missing parent:", self.path()
                 self._oobject = self._klass(self.parent.oobject, self.name,
                                             meta, self.time_sampling_id)
             else:

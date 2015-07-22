@@ -577,6 +577,9 @@ class Test1_Write(unittest.TestCase):
         p1.set_value(1.0)
         p2 = shader.properties["specular"] = cask.Property()
         p2.set_value(0.1)
+        p3 = shader.properties["color"] = cask.Property()
+        p3.set_value(imath.Color3f(0.1, 0.2, 0.3))
+        p3.metadata["interpretation"] = "rgb"
 
         # set light camera data
         samp = alembic.AbcGeom.CameraSample(-0.35, 0.75, 0.1, 0.5)
@@ -610,6 +613,8 @@ class Test1_Write(unittest.TestCase):
         garply = foo.properties["garply"] = cask.Property()
         waldo = foo.properties["waldo"] = cask.Property()
         fred = foo.properties["fred"] = cask.Property()
+        color = foo.properties["color"] = cask.Property()
+        color.metadata["interpretation"] = "rgb"
         
         # set test values
         v = imath.UnsignedCharArray(5)
@@ -622,6 +627,7 @@ class Test1_Write(unittest.TestCase):
         garply.set_value(imath.M44d())
         waldo.set_value(1)
         fred.set_value([1, 2, 3, 4])
+        color.set_value(imath.Color3f(1, 2, 3))
        
         # export
         a.write_to_file(filename)
@@ -639,22 +645,34 @@ class Test1_Write(unittest.TestCase):
         garply = foo.properties["garply"]
         waldo = foo.properties["waldo"]
         fred = foo.properties["fred"]
+        color = foo.properties["color"]
         
         # assert pod, extent values
         self.assertEqual(bar.extent(), 5)
         self.assertEqual(bar.pod(), alembic.Util.POD.kUint8POD)
+        self.assertEqual(bar.values[0], v)
         self.assertEqual(baz.extent(), 1)
         self.assertEqual(baz.pod(), alembic.Util.POD.kStringPOD)
+        self.assertEqual(list(baz.values[0]), ["a", "b", "c"])
         self.assertEqual(qux.extent(), 6)
         self.assertEqual(qux.pod(), alembic.Util.POD.kFloat64POD)
+        self.assertEqual(qux.values[0], imath.Box3d())
         self.assertEqual(quux.extent(), 9)
         self.assertEqual(quux.pod(), alembic.Util.POD.kFloat64POD)
+        self.assertEqual(quux.values[0], imath.M33d())
         self.assertEqual(garply.extent(), 16)
         self.assertEqual(garply.pod(), alembic.Util.POD.kFloat64POD)
+        self.assertEqual(garply.values[0], imath.M44d())
         self.assertEqual(waldo.extent(), 1)
         self.assertEqual(waldo.pod(), alembic.Util.POD.kInt32POD)
+        self.assertEqual(waldo.values[0], 1)
         self.assertEqual(fred.extent(), 1)
         self.assertEqual(fred.pod(), alembic.Util.POD.kInt32POD)
+        self.assertEqual(list(fred.values[0]), [1, 2, 3, 4])
+        self.assertEqual(color.extent(), 3)
+        self.assertEqual(color.pod(), alembic.Util.POD.kFloat32POD)
+        self.assertEqual(color.metadata["interpretation"], "rgb")
+        self.assertEqual(color.values[0], imath.Color3f(1, 2, 3))
 
     def test_child_bounds(self):
         filename_1 = os.path.join(TEMPDIR, "cask_child_bounds_1.abc")
@@ -961,6 +979,56 @@ class Test2_Read(unittest.TestCase):
         self.assertTrue("nurby" in d.children.keys())
         self.assertEqual(type(d.children["meshy"]), cask.Xform)
         self.assertEqual(type(d.children["nurby"]), cask.NuPatch)
+
+    def test_find(self):
+        filename = os.path.join(TEMPDIR, "cask_write_mesh.abc")
+        a = cask.Archive(filename)
+        
+        r = cask.find(a.top, name="meshy")
+        self.assertEqual(len(r), 1)
+        self.assertEqual(r[0].name, "meshy")
+        self.assertEqual(r[0].type(), "PolyMesh")
+
+        r = cask.find(a.top, name=".*hy")
+        self.assertEqual(len(r), 1)
+        self.assertEqual(r[0].name, "meshy")
+        self.assertEqual(r[0].type(), "PolyMesh")
+
+        r = cask.find(a.top, types=["PolyMesh"])
+        self.assertEqual(len(r), 1)
+        self.assertEqual(r[0].name, "meshy")
+        self.assertEqual(r[0].type(), "PolyMesh")
+
+        a.close()
+
+        filename = os.path.join(TEMPDIR, "cask_deep_dict.abc")
+        a = cask.Archive(filename)
+
+        r = cask.find(a.top, types=["Xform"])
+        self.assertEqual(len(r), 15)
+
+        r = cask.find(a.top, types=["Light"])
+        self.assertEqual(len(r), 0)
+
+        r = cask.find(a.top, name="J")
+        self.assertEqual(len(r), 1)
+
+        r = cask.find(a.top, name="D")
+        self.assertEqual(len(r), 2)
+        self.assertEqual(r[0].name, "D")
+        self.assertEqual(r[0].type(), "Xform")
+
+        r = cask.find(a.top, name="nurby")
+        self.assertEqual(len(r), 1)
+        self.assertEqual(r[0].name, "nurby")
+        self.assertEqual(r[0].type(), "NuPatch")
+
+        r = cask.find(a.top, types=["NuPatch"])
+        self.assertEqual(len(r), 1)
+        self.assertEqual(r[0].name, "nurby")
+        self.assertEqual(r[0].type(), "NuPatch")
+        
+        a.close()
 
 class Test3_Issues(unittest.TestCase):
     def test_issue_318(self):
